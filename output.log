@@ -1,0 +1,96 @@
+ Image dogmap-api Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 523B 0.2s done
+#1 DONE 0.2s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 552B 0.0s done
+#2 DONE 0.1s
+
+#3 [internal] load metadata for ghcr.io/astral-sh/uv:latest
+#3 DONE 1.9s
+
+#4 [internal] load metadata for docker.io/library/python:3.12-slim
+#4 DONE 2.4s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 94B 0.0s done
+#5 DONE 0.1s
+
+#6 [internal] load build context
+#6 DONE 0.0s
+
+#7 [stage-0 1/7] FROM docker.io/library/python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+#7 resolve docker.io/library/python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de 0.1s done
+#7 DONE 0.1s
+
+#8 FROM ghcr.io/astral-sh/uv:latest@sha256:ecd4de2f060c64bea0ff8ecb182ddf46ba3fcccdc8a60cfdbaf20d1a047d7437
+#8 resolve ghcr.io/astral-sh/uv:latest@sha256:ecd4de2f060c64bea0ff8ecb182ddf46ba3fcccdc8a60cfdbaf20d1a047d7437 0.1s done
+#8 DONE 0.1s
+
+#6 [internal] load build context
+#6 transferring context: 1.71kB 0.0s done
+#6 DONE 0.1s
+
+#9 [stage-0 3/7] WORKDIR /app
+#9 CACHED
+
+#10 [stage-0 2/7] COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+#10 CACHED
+
+#11 [stage-0 4/7] COPY pyproject.toml uv.lock ./
+#11 CACHED
+
+#12 [stage-0 5/7] RUN uv sync --frozen --no-install-project --no-dev
+#12 CACHED
+
+#13 [stage-0 6/7] COPY . .
+#13 DONE 0.1s
+
+#14 [stage-0 7/7] RUN uv sync --frozen --no-dev
+#14 2.415 Bytecode compiled 950 files in 1.14s
+#14 DONE 2.5s
+
+#15 exporting to image
+#15 exporting layers
+#15 exporting layers 0.5s done
+#15 exporting manifest sha256:f4e4e5d5a17d32ab89059d2b71643f5c29d94d04884f381d05f450546a581e84 0.1s done
+#15 exporting config sha256:9a280616666e2874c052ec37435e95ccddcd9335fceb6c8b401add3cd2cc1cc0 0.1s done
+#15 exporting attestation manifest sha256:81207e0b193309f9eab26c1109316118eb8919db3153a017407d45fdb09e261e 0.1s done
+#15 exporting manifest list sha256:7174b6145ded32dc0a5a01b518c51a874dd14ab1d971cc42dacd75d898a0f2b3
+#15 exporting manifest list sha256:7174b6145ded32dc0a5a01b518c51a874dd14ab1d971cc42dacd75d898a0f2b3 0.1s done
+#15 naming to docker.io/library/dogmap-api:latest 0.0s done
+#15 unpacking to docker.io/library/dogmap-api:latest
+#15 unpacking to docker.io/library/dogmap-api:latest 0.2s done
+#15 DONE 1.3s
+
+#16 resolving provenance for metadata file
+#16 DONE 0.1s
+ Image dogmap-api Built 
+ Container dogmap-api-1 Recreate 
+ Container dogmap-api-1 Recreated 
+Attaching to api-1, db-1
+ Container dogmap-db-1 Starting 
+db-1  | 2026-07-22 14:15:21+00:00 [Note] [Entrypoint]: Entrypoint script for MySQL Server 8.0.46-1.el9 started.
+ Container dogmap-db-1 Started 
+ Container dogmap-db-1 Waiting 
+db-1  | 2026-07-22 14:15:22+00:00 [Note] [Entrypoint]: Switching to dedicated user 'mysql'
+db-1  | 2026-07-22 14:15:22+00:00 [Note] [Entrypoint]: Entrypoint script for MySQL Server 8.0.46-1.el9 started.
+db-1  | '/var/lib/mysql/mysql.sock' -> '/var/run/mysqld/mysqld.sock'
+db-1  | 2026-07-22T14:15:23.095368Z 0 [Warning] [MY-011068] [Server] The syntax '--skip-host-cache' is deprecated and will be removed in a future release. Please use SET GLOBAL host_cache_size=0 instead.
+db-1  | 2026-07-22T14:15:23.100816Z 0 [System] [MY-010116] [Server] /usr/sbin/mysqld (mysqld 8.0.46) starting as process 1
+db-1  | 2026-07-22T14:15:23.126214Z 1 [System] [MY-013576] [InnoDB] InnoDB initialization has started.
+db-1  | 2026-07-22T14:15:23.693661Z 1 [System] [MY-013577] [InnoDB] InnoDB initialization has ended.
+db-1  | 2026-07-22T14:15:24.411172Z 0 [Warning] [MY-010068] [Server] CA certificate ca.pem is self signed.
+db-1  | 2026-07-22T14:15:24.411372Z 0 [System] [MY-013602] [Server] Channel mysql_main configured to support TLS. Encrypted connections are now supported for this channel.
+db-1  | 2026-07-22T14:15:24.425705Z 0 [Warning] [MY-011810] [Server] Insecure configuration for --pid-file: Location '/var/run/mysqld' in the path is accessible to all OS users. Consider choosing a different directory.
+db-1  | 2026-07-22T14:15:24.536365Z 0 [System] [MY-011323] [Server] X Plugin ready for connections. Bind-address: '::' port: 33060, socket: /var/run/mysqld/mysqlx.sock
+db-1  | 2026-07-22T14:15:24.538093Z 0 [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.46'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  MySQL Community Server - GPL.
+ Container dogmap-db-1 Healthy 
+ Container dogmap-api-1 Starting 
+ Container dogmap-api-1 Started 
+api-1  | INFO:     Started server process [1]
+api-1  | INFO:     Waiting for application startup.
+api-1  | INFO:     Application startup complete.
+api-1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+api-1  | INFO:     172.19.0.1:46060 - "GET /health HTTP/1.1" 200 OK
