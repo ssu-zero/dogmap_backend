@@ -24,8 +24,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here for 'autogenerate' support.
-# once app models exist, point this at their shared declarative Base, e.g.:
-# from app.models.base import Base
+# 스키마가 안정화되면 아래처럼 도메인 models.py를 import해 Base.metadata를 연결할 것.
+# from app.common.base_model import Base
+# from app.domains.dogs import models as dogs_models
 # target_metadata = Base.metadata
 target_metadata = None
 
