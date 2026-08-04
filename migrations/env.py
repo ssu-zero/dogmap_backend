@@ -24,10 +24,17 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here for 'autogenerate' support.
-# once app models exist, point this at their shared declarative Base, e.g.:
-# from app.models.base import Base
-# target_metadata = Base.metadata
-target_metadata = None
+from app.common.base_model import Base
+
+# 도메인별 models.py를 import해 Base.metadata에 테이블을 등록한다.
+from app.domains.courses import models as courses_models  # noqa: F401
+from app.domains.dogs import models as dogs_models  # noqa: F401
+from app.domains.likes import models as likes_models  # noqa: F401
+from app.domains.logs import models as logs_models  # noqa: F401
+from app.domains.places import models as places_models  # noqa: F401
+from app.domains.saves import models as saves_models  # noqa: F401
+
+target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
