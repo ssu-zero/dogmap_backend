@@ -24,17 +24,11 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here for 'autogenerate' support.
-from app.common.base_model import Base
-
-# 도메인별 models.py를 import해 Base.metadata에 테이블을 등록한다.
-from app.domains.courses import models as courses_models  # noqa: F401
-from app.domains.dogs import models as dogs_models  # noqa: F401
-from app.domains.likes import models as likes_models  # noqa: F401
-from app.domains.logs import models as logs_models  # noqa: F401
-from app.domains.places import models as places_models  # noqa: F401
-from app.domains.saves import models as saves_models  # noqa: F401
-
-target_metadata = Base.metadata
+# 스키마가 안정화되면 아래처럼 도메인 models.py를 import해 Base.metadata를 연결할 것.
+# from app.common.base_model import Base
+# from app.domains.dogs import models as dogs_models
+# target_metadata = Base.metadata
+target_metadata = None
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
