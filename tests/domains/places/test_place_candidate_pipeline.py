@@ -5,7 +5,7 @@ from app.domains.places.external.pet_tour_client import (
     DetailPetTour,
     LocationBasedItem,
 )
-from app.domains.places.service import get_buffer_size, select_places_for_category
+from app.domains.places.service import extract_place_candidates_for_category, get_buffer_size
 
 
 class _FakeClient:
@@ -65,14 +65,15 @@ def test_get_buffer_size():
     assert get_buffer_size(0) == 6  # 하한
 
 
-async def test_returns_k_candidates_when_enough_found():
+async def test_returns_whole_pool_without_trimming_to_k():
+    """k는 버퍼 크기 산정용일 뿐 최종 개수 제한이 아니다 — 최종 선택은 LLM(4단계) 몫이다."""
     client = _FakeClient({2000: [_item("1"), _item("2"), _item("3")]})
 
-    result = await select_places_for_category(
+    result = await extract_place_candidates_for_category(
         PlaceSearchCategory.WALK, 2, 37.5, 127.1, client=client
     )
 
-    assert len(result) == 2
+    assert len(result) == 3
     assert client.radii_called == [2000]
     # 외부에서 주입한 client는 서비스가 닫지 않는다
     assert client.closed is False
@@ -86,7 +87,7 @@ async def test_expands_radius_when_insufficient():
         }
     )
 
-    result = await select_places_for_category(
+    result = await extract_place_candidates_for_category(
         PlaceSearchCategory.WALK, 3, 37.5, 127.1, client=client
     )
 
@@ -97,7 +98,7 @@ async def test_expands_radius_when_insufficient():
 async def test_radius_doubles_each_retry():
     client = _FakeClient({2000: [], 4000: [], 8000: []})
 
-    result = await select_places_for_category(
+    result = await extract_place_candidates_for_category(
         PlaceSearchCategory.WALK, 3, 37.5, 127.1, client=client, max_retries=2
     )
 
@@ -108,7 +109,7 @@ async def test_radius_doubles_each_retry():
 async def test_returns_fewer_than_k_after_max_retries_exhausted():
     client = _FakeClient({2000: [_item("1")], 4000: [_item("1")], 8000: [_item("1")]})
 
-    result = await select_places_for_category(
+    result = await extract_place_candidates_for_category(
         PlaceSearchCategory.WALK, 3, 37.5, 127.1, client=client, max_retries=2
     )
 
