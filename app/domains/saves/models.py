@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer
+from sqlalchemy import BigInteger, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.base_model import Base, CreatedAtMixin
@@ -11,12 +11,23 @@ if TYPE_CHECKING:
 
 
 class Save(CreatedAtMixin, Base):
+    """Dog-Course 저장. 생성/삭제만 하고 수정하지 않으므로 updated_at을 두지 않는다.
+
+    course_id/dog_id 복합 PK 대신 save_id 단일 PK + UNIQUE(dog_id, course_id)를 쓴다.
+    """
+
     __tablename__ = "saves"
 
-    course_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("courses.course_id"), primary_key=True
-    )
-    dog_id: Mapped[int] = mapped_column(Integer, ForeignKey("dogs.dog_id"), primary_key=True)
+    __table_args__ = (UniqueConstraint("dog_id", "course_id", name="uq_saves_dog_course"),)
 
-    course: Mapped["Course"] = relationship("Course", back_populates="saves")
-    dog: Mapped["Dog"] = relationship("Dog", back_populates="saves")
+    save_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+
+    dog_id: Mapped[int] = mapped_column(
+        ForeignKey("dogs.dog_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    dog: Mapped["Dog"] = relationship()
+
+    course_id: Mapped[int] = mapped_column(
+        ForeignKey("courses.course_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    course: Mapped["Course"] = relationship()

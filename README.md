@@ -62,17 +62,7 @@ DATABASE_URL=mysql+pymysql://dogmap:dogmap@localhost:3308/dogmap
 uv sync
 ```
 
-### 4. 테이블 생성 (임시)
-
-> 스키마가 아직 자주 바뀌는 초기 단계라 Alembic 마이그레이션은 나중에 도입할 예정입니다.
-> 그 전까지는 아래 스크립트로 현재 모델 기준 테이블을 생성해서 사용합니다.
-> 스키마를 바꿨다면 테이블을 지우고 다시 실행해주세요.
-
-```bash
-uv run python -m scripts.create_tables
-```
-
-### 5. 서버 실행
+### 4. 서버 실행
 
 ```bash
 uv run uvicorn app.main:app --reload
@@ -108,7 +98,7 @@ Python(PEP8) 기준으로 작성합니다.
 - 상수: `UPPER_SNAKE_CASE` (예: `MAX_COUNT`)
 - Enum 멤버: `UPPER_SNAKE_CASE` (예: `DogSize.SMALL`)
 - Boolean 변수/반환값 함수: `is_`, `has_`, `can_` 접두사 (예: `is_active`)
-- 파일/모듈명: PEP8에 따라 `snake_case` (예: `models.py`, `create_tables.py`)
+- 파일/모듈명: PEP8에 따라 `snake_case` (예: `models.py`, `discover_pet_tour_categories.py`)
 - 폴더명: 내용이 드러나도록 작성 (예: `domains`, `core`, `common`)
 
 ## 커밋 컨벤션

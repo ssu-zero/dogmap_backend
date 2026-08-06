@@ -1,13 +1,10 @@
 import enum
-from typing import TYPE_CHECKING
+from datetime import time
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import BigInteger, Enum, Float, String, Text, Time
+from sqlalchemy.orm import Mapped, mapped_column
 
-from app.common.base_model import Base
-
-if TYPE_CHECKING:
-    from app.domains.courses.models import CoursePlace
+from app.common.base_model import Base, TimestampMixin
 
 
 class PlaceCategory(str, enum.Enum):
@@ -21,32 +18,25 @@ class PlaceCategory(str, enum.Enum):
     ETC = "ETC"
 
 
-class Location(Base):
-    __tablename__ = "locations"
+class Place(TimestampMixin, Base):
+    """장소. 위도/경도는 Place 자체의 값으로 보유한다 (별도 Location 엔티티 없음) —
+    한 Place에 좌표 하나만 대응되고 좌표를 독립적으로 생성/조회/수정할 요구사항이
+    없다면 별도 테이블로 분리하는 건 과도한 설계라 통합했다.
+    """
 
-    location_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    lat: Mapped[str] = mapped_column(String(32), nullable=False)
-    lng: Mapped[str] = mapped_column(String(32), nullable=False)
-
-    place: Mapped["Place"] = relationship("Place", back_populates="location", uselist=False)
-
-
-class Place(Base):
     __tablename__ = "places"
 
-    place_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-    content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    category: Mapped[PlaceCategory] = mapped_column(Enum(PlaceCategory), nullable=False)
-    image_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # TODO: 시간대/휴무일 표현 형식은 기획 확정 후 조정 (예: "09:00-21:00", "매주 월요일")
-    open_time: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    rest_day: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    location_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("locations.location_id"), nullable=False, unique=True
+    place_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[PlaceCategory] = mapped_column(
+        Enum(PlaceCategory, name="place_category"), nullable=False
     )
+    image_url: Mapped[str | None] = mapped_column(String(500))
+    # TODO: 영업시간이 보통 "시작~종료" 범위인데 단일 Time 컬럼이라 표현이 제한적이다.
+    # 필요해지면 open_time/close_time 쌍으로 분리 검토.
+    open_time: Mapped[time | None] = mapped_column(Time)
+    rest_day: Mapped[str | None] = mapped_column(String(100))
 
-    location: Mapped["Location"] = relationship("Location", back_populates="place")
-    course_places: Mapped[list["CoursePlace"]] = relationship(
-        "CoursePlace", back_populates="place", cascade="all, delete-orphan"
-    )
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)

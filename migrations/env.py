@@ -24,7 +24,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here for 'autogenerate' support.
-# 스키마가 안정화되면 아래처럼 도메인 models.py를 import해 Base.metadata를 연결할 것.
+# develop 브랜치로 병합된 뒤 한 번에 Alembic 마이그레이션을 정리할 예정이라
+# 이 브랜치에서는 연결하지 않는다. 그 시점에 아래처럼 도메인 models.py를 import해
+# Base.metadata를 연결할 것.
 # from app.common.base_model import Base
 # from app.domains.dogs import models as dogs_models
 # target_metadata = Base.metadata
