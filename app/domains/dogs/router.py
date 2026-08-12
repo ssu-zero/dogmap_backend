@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import create_access_token, get_current_dog_id, get_signup_kakao_id
 from app.domains.dogs import repository
-from app.domains.dogs.schemas import DogCreate, DogResponse, SignupCompleteResponse
+from app.domains.dogs.schemas import DogCreate, DogResponse, DogUpdate, SignupCompleteResponse
 
 router = APIRouter(prefix="/dogs", tags=["dogs"])
 
@@ -54,3 +54,31 @@ def get_my_profile(
     if dog is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="강아지를 찾을 수 없습니다")
     return dog
+
+
+@router.patch(
+    "/me",
+    response_model=DogResponse,
+    summary="마이페이지: 내 프로필 수정",
+    description=(
+        "`access_token`으로 인증해서 호출한다. body에 보낸 필드만 수정되는 partial update — "
+        "수정하지 않을 필드는 아예 생략하면 된다."
+    ),
+    responses={
+        404: {"description": "토큰은 유효하지만 대상 강아지가 DB에 없는 경우(탈퇴 등)"},
+    },
+)
+def update_my_profile(
+    body: DogUpdate,
+    dog_id: int = Depends(get_current_dog_id),
+    db: Session = Depends(get_db),
+):
+    dog = repository.get_by_id(db, dog_id)
+    if dog is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="강아지를 찾을 수 없습니다")
+
+    update_data = body.model_dump(exclude_unset=True)
+    if not update_data:
+        return dog
+
+    return repository.update(db, dog, **update_data)
