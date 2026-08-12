@@ -7,7 +7,7 @@ from app.common.base_model import Base, TimestampMixin
 
 
 class DogSize(str, enum.Enum):
-    """TODO: 실제 사이즈 구간 기준은 기획 확정 후 조정."""
+    """온보딩 화면 기준: 소형 10kg 이하 / 중형 10~25kg / 대형 25kg 이상."""
 
     SMALL = "SMALL"
     MEDIUM = "MEDIUM"
