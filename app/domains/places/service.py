@@ -71,12 +71,12 @@ def _is_pet_friendly(pet_tour: DetailPetTour | None, lat: str | None, lng: str |
 
 
 def get_buffer_size(k: int) -> int:
-    """필터링 전 조회할 후보 수(N). 가중 랜덤이 의미 있으려면 k보다 충분히 커야 한다.
+    """필터링 전 조회할 후보 수(N). LLM에 넘기는 후보 수와 직결되므로(4단계), 너무 크면
+    LLM 응답 시간이 늘어난다 — k보다 몇 개 더 있는 수준으로만 buffer를 준다.
 
-    k=1 -> 7, k=2 -> 11, k=3 -> 15(상한) 수준. 상한 15는 공공데이터 API 호출 부담을
-    고려한 값 — 통과율을 보며 조정 가능.
+    k=1 -> 4, k=2 -> 6, k=3 -> 8(상한) 수준.
     """
-    return min(max(k * 4 + 3, 6), 15)
+    return min(max(k * 2 + 2, 4), 8)
 
 
 def select_random_sample(candidates: list[PlaceCandidate], k: int) -> list[PlaceCandidate]:

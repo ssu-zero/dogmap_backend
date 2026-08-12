@@ -133,9 +133,12 @@ def _seed_nearby_course(session_factory) -> int:
     return course_id
 
 
-def test_get_nearby_courses_without_auth_header_is_rejected(client):
+def test_get_nearby_courses_without_auth_header_is_allowed(client, session_factory):
+    # 코스 목록 조회는 비로그인 사용자도 볼 수 있어야 하는 공개 API라 인증이 필요 없다.
+    _seed_nearby_course(session_factory)
+
     response = client.get("/api/v1/courses", params={"lat": 37.5, "lng": 127.0})
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
 def test_get_nearby_courses_returns_courses_within_radius(client, session_factory):
@@ -144,7 +147,6 @@ def test_get_nearby_courses_returns_courses_within_radius(client, session_factor
     response = client.get(
         "/api/v1/courses",
         params={"lat": 37.5, "lng": 127.0, "radius_m": 3000},
-        headers=_auth_headers(),
     )
 
     assert response.status_code == 200

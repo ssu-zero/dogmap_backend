@@ -54,7 +54,6 @@ async def get_nearby_courses(
     limit: int = Query(20, ge=1, le=50),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    _dog_id: int = Depends(get_current_dog_id),
 ) -> list[CourseSummary]:
     return list_nearby_courses(db, lat=lat, lng=lng, radius_m=radius_m, limit=limit, offset=offset)
 

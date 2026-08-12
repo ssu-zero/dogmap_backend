@@ -58,11 +58,11 @@ def _item(content_id: str, dist: float = 100.0) -> LocationBasedItem:
 
 
 def test_get_buffer_size():
-    assert get_buffer_size(1) == 7
-    assert get_buffer_size(2) == 11
-    assert get_buffer_size(3) == 15
-    assert get_buffer_size(10) == 15  # 상한
-    assert get_buffer_size(0) == 6  # 하한
+    assert get_buffer_size(1) == 4
+    assert get_buffer_size(2) == 6
+    assert get_buffer_size(3) == 8
+    assert get_buffer_size(10) == 8  # 상한
+    assert get_buffer_size(0) == 4  # 하한
 
 
 async def test_returns_whole_pool_without_trimming_to_k():

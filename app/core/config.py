@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     # 특정 버전 모델명(gemini-2.0-flash 등)은 몇 달 단위로 지원 종료된다 — 별칭을 써서
     # 모델 지원 종료 때마다 코드/설정을 바꾸지 않게 한다.
-    LLM_MODEL: str = "gemini-flash-latest"
+    # gemini-flash-latest는 "생각"(thinking) 모드 때문에 응답 시간이 5~30초로 들쭉날쭉했다.
+    # gemini-flash-lite-latest는 실측 0.9초 안팎으로 훨씬 빠르고 일관적이라 이걸 기본값으로 쓴다
+    # (장소 후보 중 선택하는 정도의 단순 작업이라 품질 차이는 거의 없었음).
+    LLM_MODEL: str = "gemini-flash-lite-latest"
 
     # 공공데이터포털 - 반려동물 동반여행 서비스 (KorPetTourService2)
     PET_TOUR_API_KEY: str = ""
