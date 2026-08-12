@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import BigInteger, Enum, Float, Integer, String
+from sqlalchemy import BigInteger, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.common.base_model import Base, TimestampMixin
@@ -34,5 +34,4 @@ class Dog(TimestampMixin, Base):
     image_url: Mapped[str | None] = mapped_column(String(500))
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     age: Mapped[int | None] = mapped_column(Integer)
-    weight: Mapped[float | None] = mapped_column(Float)
     size: Mapped[DogSize] = mapped_column(Enum(DogSize, name="dog_size"), nullable=False)

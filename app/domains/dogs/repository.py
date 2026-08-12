@@ -19,7 +19,6 @@ def create(
     name: str,
     size: DogSize,
     age: int | None = None,
-    weight: float | None = None,
     image_url: str | None = None,
 ) -> Dog:
     dog = Dog(
@@ -27,10 +26,17 @@ def create(
         name=name,
         size=size,
         age=age,
-        weight=weight,
         image_url=image_url,
     )
     db.add(dog)
+    db.commit()
+    db.refresh(dog)
+    return dog
+
+
+def update(db: Session, dog: Dog, **fields: object) -> Dog:
+    for key, value in fields.items():
+        setattr(dog, key, value)
     db.commit()
     db.refresh(dog)
     return dog
