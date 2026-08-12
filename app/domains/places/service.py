@@ -1,11 +1,15 @@
 import asyncio
 import json
 import logging
-import math
 import random
 
 from app.common.exceptions import ExternalApiError
-from app.domains.places.constants import CATEGORY_SEARCH_PARAMS, PlaceSearchCategory
+from app.common.geo import haversine_distance_m
+from app.domains.places.constants import (
+    CATEGORY_SEARCH_PARAMS,
+    DEFAULT_STAY_MINUTES,
+    PlaceSearchCategory,
+)
 from app.domains.places.external.llm_client import LLMApiError, LLMClient
 from app.domains.places.external.pet_tour_client import (
     DetailPetTour,
@@ -40,7 +44,6 @@ _FAILURE_RATE_THRESHOLD = 0.5
 # 경유지 계산 단계에서 다시 계산되므로, 여기서는 대략적인 시간 배분 판단에만 쓴다.
 _WALK_SPEED_M_PER_MIN = 67.0  # 시속 4km 도보 기준
 _ROAD_DETOUR_FACTOR = 1.3  # 직선거리 대비 실제 도로 보정 계수
-_DEFAULT_STAY_MINUTES = 15  # 체류시간 정보가 없을 때 쓰는 기본값
 _TARGET_TIME_RATIO = 0.7  # 최종 조합의 예상 소요시간이 맞춰야 할 목표 시간 대비 비율
 
 
@@ -209,16 +212,6 @@ async def extract_place_candidates_for_category(
             await client.aclose()
 
 
-def _haversine_distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """두 좌표 간 직선거리(m)."""
-    r = 6371000.0
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lng2 - lng1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-
 def _estimate_travel_minutes(dist_m: float) -> float:
     return (dist_m * _ROAD_DETOUR_FACTOR) / _WALK_SPEED_M_PER_MIN
 
@@ -236,13 +229,13 @@ def _build_finalize_prompts(
 ) -> tuple[str, str]:
     candidates_payload = []
     for c in candidates:
-        dist_from_start = _haversine_distance_m(start_lat, start_lng, c.lat, c.lng)
+        dist_from_start = haversine_distance_m(start_lat, start_lng, c.lat, c.lng)
         candidates_payload.append(
             {
                 "content_id": c.content_id,
                 "title": c.title,
                 "category": c.category,
-                "stay_minutes_estimate": _DEFAULT_STAY_MINUTES,
+                "stay_minutes_estimate": DEFAULT_STAY_MINUTES,
                 "distance_from_start_m": round(dist_from_start),
                 "estimated_travel_minutes_from_start": round(
                     _estimate_travel_minutes(dist_from_start), 1

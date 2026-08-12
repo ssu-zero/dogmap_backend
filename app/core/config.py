@@ -13,10 +13,15 @@ class Settings(BaseSettings):
     TMAP_APP_KEY: str = ""
     TMAP_BASE_URL: str = "https://apis.openapi.sk.com"
 
-    # LLM (OpenAI) - places 도메인의 장소 최종 확정에 사용
+    # LLM (Gemini, OpenAI 호환 엔드포인트) - places 도메인의 장소 최종 확정에 사용.
+    # Gemini는 OpenAI Chat Completions와 동일한 요청/응답 형식을 지원하는 호환 엔드포인트를
+    # 제공하므로(https://ai.google.dev/gemini-api/docs/openai), LLMClient 코드 변경 없이
+    # base_url/model/api_key만 바꿔서 쓴다. API 키는 https://aistudio.google.com/apikey 에서 발급.
     LLM_API_KEY: str = ""
-    LLM_BASE_URL: str = "https://api.openai.com/v1"
-    LLM_MODEL: str = "gpt-4o-mini"
+    LLM_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    # 특정 버전 모델명(gemini-2.0-flash 등)은 몇 달 단위로 지원 종료된다 — 별칭을 써서
+    # 모델 지원 종료 때마다 코드/설정을 바꾸지 않게 한다.
+    LLM_MODEL: str = "gemini-flash-latest"
 
     # 공공데이터포털 - 반려동물 동반여행 서비스 (KorPetTourService2)
     PET_TOUR_API_KEY: str = ""

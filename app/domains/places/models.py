@@ -27,6 +27,11 @@ class Place(TimestampMixin, Base):
     __tablename__ = "places"
 
     place_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+
+    # 공공데이터(KorPetTourService2) content_id — 코스 생성 파이프라인이 같은 장소를
+    # 여러 코스에서 재사용할 때 이 값으로 get-or-create해서 Place row 중복 생성을 막는다.
+    content_id: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     content: Mapped[str | None] = mapped_column(Text)
     category: Mapped[PlaceCategory] = mapped_column(

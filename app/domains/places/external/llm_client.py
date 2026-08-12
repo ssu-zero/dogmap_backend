@@ -1,4 +1,8 @@
-"""OpenAI Chat Completions 호출 클라이언트.
+"""OpenAI Chat Completions 형식(OpenAI 호환 엔드포인트) 호출 클라이언트.
+
+기본값은 Gemini의 OpenAI 호환 엔드포인트(app/core/config.py의 LLM_BASE_URL 참고)를
+가리키지만, OpenAI Chat Completions와 동일한 요청/응답 스펙을 따르는 엔드포인트라면
+base_url/model/api_key만 바꿔서 그대로 재사용할 수 있다 (코드가 특정 벤더에 묶여있지 않음).
 
 places 도메인에서 "장소 후보 풀 중 사용자가 원하는 산책 시간에 맞는 최종 조합을 고르는"
 용도로만 사용한다. 프롬프트 구성/응답 해석은 이 클라이언트가 아니라 service.py가 담당하고,
@@ -13,7 +17,8 @@ import httpx
 from app.common.exceptions import ExternalApiError
 from app.core.config import settings
 
-_DEFAULT_TIMEOUT = 30.0
+_DEFAULT_TIMEOUT = 60.0  # Gemini는 응답 전에 내부적으로 "생각"(thinking)하는 시간이 붙어서
+# 가끔 30초를 넘길 때가 있다 — 실제 후보 7개짜리 프롬프트가 30초 타임아웃에 걸린 적이 있음.
 
 
 class LLMApiError(ExternalApiError):
@@ -46,7 +51,7 @@ class LLMClient:
             await self._client.aclose()
 
     async def chat_json(self, *, system_prompt: str, user_prompt: str) -> dict[str, Any]:
-        """OpenAI Chat Completions를 JSON 모드로 호출하고 파싱된 응답 객체를 반환한다."""
+        """Chat Completions를 JSON 모드로 호출하고 파싱된 응답 객체를 반환한다."""
         try:
             response = await self._client.post(
                 "/chat/completions",
@@ -64,14 +69,14 @@ class LLMClient:
             response.raise_for_status()
             payload = response.json()
         except httpx.HTTPError as exc:
-            raise LLMApiError(f"OpenAI 호출 실패: {exc}") from exc
+            raise LLMApiError(f"LLM 호출 실패: {exc}") from exc
 
         try:
             content = payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError) as exc:
-            raise LLMApiError(f"예상치 못한 OpenAI 응답 형식: {payload}") from exc
+            raise LLMApiError(f"예상치 못한 LLM 응답 형식: {payload}") from exc
 
         try:
             return json.loads(content)
         except json.JSONDecodeError as exc:
-            raise LLMApiError(f"OpenAI 응답 JSON 파싱 실패: {content}") from exc
+            raise LLMApiError(f"LLM 응답 JSON 파싱 실패: {content}") from exc

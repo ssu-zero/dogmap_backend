@@ -47,7 +47,12 @@ def _make_course(session: Session, course_id: int, title: str = "코스") -> Cou
 
 def _make_place(session: Session, place_id: int, name: str = "장소") -> Place:
     place = Place(
-        place_id=place_id, name=name, category=PlaceCategory.PARK, latitude=37.5, longitude=127.0
+        place_id=place_id,
+        content_id=f"cid-{place_id}",
+        name=name,
+        category=PlaceCategory.PARK,
+        latitude=37.5,
+        longitude=127.0,
     )
     session.add(place)
     session.commit()
