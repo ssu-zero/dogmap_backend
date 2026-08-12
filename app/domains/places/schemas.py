@@ -19,3 +19,22 @@ class PlaceCandidate(BaseModel):
     pet_need_materials: str | None = None
     pet_caution: str | None = None
     pet_facilities: str | None = None
+
+
+class WalkingCourseLeg(BaseModel):
+    """산책 코스의 한 구간(경유지 사이)."""
+
+    from_title: str
+    to_title: str
+    distance_meters: float
+    duration_minutes: float
+
+
+class WalkingCourseResult(BaseModel):
+    """T맵 보행자 경로로 확정한 최종 산책 코스. path는 카카오맵 등 프론트에서 그릴 때 쓴다."""
+
+    stops: list[PlaceCandidate]  # 방문 순서대로
+    legs: list[WalkingCourseLeg]
+    total_distance_meters: float
+    total_duration_minutes: float
+    path: list[tuple[float, float]]  # (lat, lng) 폴리라인

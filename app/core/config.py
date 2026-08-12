@@ -6,10 +6,25 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "mysql+pymysql://dogmap:dogmap@localhost:3308/dogmap"
 
-    # 외부 API 연동 (courses 도메인 service layer에서 사용)
+    # 카카오 로그인 등 (courses/dogs 도메인에서 사용 예정)
     KAKAO_REST_API_KEY: str = ""
+
+    # T맵(SK Open API) 보행자 경로 - places 도메인의 산책 코스(경유지) 계산에 사용
     TMAP_APP_KEY: str = ""
+    TMAP_BASE_URL: str = "https://apis.openapi.sk.com"
+
+    # LLM (Gemini, OpenAI 호환 엔드포인트) - places 도메인의 장소 최종 확정에 사용.
+    # Gemini는 OpenAI Chat Completions와 동일한 요청/응답 형식을 지원하는 호환 엔드포인트를
+    # 제공하므로(https://ai.google.dev/gemini-api/docs/openai), LLMClient 코드 변경 없이
+    # base_url/model/api_key만 바꿔서 쓴다. API 키는 https://aistudio.google.com/apikey 에서 발급.
     LLM_API_KEY: str = ""
+    LLM_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    # 특정 버전 모델명(gemini-2.0-flash 등)은 몇 달 단위로 지원 종료된다 — 별칭을 써서
+    # 모델 지원 종료 때마다 코드/설정을 바꾸지 않게 한다.
+    # gemini-flash-latest는 "생각"(thinking) 모드 때문에 응답 시간이 5~30초로 들쭉날쭉했다.
+    # gemini-flash-lite-latest는 실측 0.9초 안팎으로 훨씬 빠르고 일관적이라 이걸 기본값으로 쓴다
+    # (장소 후보 중 선택하는 정도의 단순 작업이라 품질 차이는 거의 없었음).
+    LLM_MODEL: str = "gemini-flash-lite-latest"
 
     # 공공데이터포털 - 반려동물 동반여행 서비스 (KorPetTourService2)
     PET_TOUR_API_KEY: str = ""

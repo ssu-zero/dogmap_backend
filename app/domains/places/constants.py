@@ -10,6 +10,10 @@ class PlaceSearchCategory(str, enum.Enum):
     ACTIVITY = "액티비티"
 
 
+# 체류시간 정보가 없을 때 쓰는 기본값 (courses 도메인의 CoursePlace.stay_minutes 저장에도 재사용)
+DEFAULT_STAY_MINUTES = 15
+
+
 # KorPetTourService2 contentTypeId
 CONTENT_TYPE_ID_TOUR_SPOT = "12"  # 관광지
 CONTENT_TYPE_ID_CULTURE = "14"  # 문화시설
