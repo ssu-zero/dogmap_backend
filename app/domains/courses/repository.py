@@ -7,11 +7,30 @@ from app.domains.courses.models import Course, CoursePlace
 from app.domains.places.models import Place
 
 
-def create_course(db: Session, *, title: str, start_lat: float, start_lng: float) -> Course:
-    course = Course(title=title, start_lat=start_lat, start_lng=start_lng)
+def create_course(
+    db: Session,
+    *,
+    title: str,
+    start_lat: float,
+    start_lng: float,
+    dog_id: int,
+    path: list[tuple[float, float]],
+) -> Course:
+    course = Course(
+        title=title, start_lat=start_lat, start_lng=start_lng, dog_id=dog_id, path=path
+    )
     db.add(course)
     db.flush()
     return course
+
+
+def get_course_by_id(db: Session, course_id: int) -> Course | None:
+    return db.get(Course, course_id)
+
+
+def delete_course(db: Session, course: Course) -> None:
+    db.delete(course)
+    db.flush()
 
 
 @dataclass
@@ -46,6 +65,7 @@ def list_courses_within_bounding_box(
     db: Session, *, min_lat: float, max_lat: float, min_lng: float, max_lng: float
 ) -> list[Course]:
     stmt = select(Course).where(
+        Course.is_shared.is_(True),
         Course.start_lat.between(min_lat, max_lat),
         Course.start_lng.between(min_lng, max_lng),
     )

@@ -82,6 +82,18 @@ def get_current_dog_id(token: str = Depends(_credentials)) -> int:
     return payload["dog_id"]
 
 
+def get_current_dog_id_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+) -> int | None:
+    """비로그인도 허용하되 로그인 시엔 dog_id를 알아야 하는 API(코스 목록/상세 조회 등)용.
+    헤더가 아예 없으면 None, 있는데 무효한 토큰이면 여전히 401을 낸다.
+    """
+    if credentials is None:
+        return None
+    payload = _decode(credentials.credentials, TokenType.ACCESS)
+    return payload["dog_id"]
+
+
 def get_signup_kakao_id(token: str = Depends(_credentials)) -> int:
     """강아지 프로필 등록(회원가입 완료) 전용 의존성. signup_token을 검증하고 kakao_id를 반환한다."""
     payload = _decode(token, TokenType.SIGNUP)

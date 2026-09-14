@@ -38,3 +38,4 @@ class WalkingCourseResult(BaseModel):
     total_distance_meters: float
     total_duration_minutes: float
     path: list[tuple[float, float]]  # (lat, lng) 폴리라인
+    generation_duration_ms: int  # 장소 선정+AI 확정+T맵 경로까지 전체 파이프라인 소요시간

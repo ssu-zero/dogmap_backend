@@ -1,12 +1,13 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Boolean, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.base_model import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.domains.dogs.models import Dog
     from app.domains.places.models import Place
 
 
@@ -16,9 +17,23 @@ class Course(TimestampMixin, Base):
     course_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
 
+    # 코스를 만든 회원. 회원 탈퇴 후에도 코스(및 다른 회원의 좋아요/저장/기록)는 남기기
+    # 위해 ondelete="SET NULL" — Log.course_id와 대칭되는 패턴.
+    dog_id: Mapped[int | None] = mapped_column(
+        ForeignKey("dogs.dog_id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    dog: Mapped["Dog | None"] = relationship()
+
+    # 기본 비공개. 소유자가 공유 API를 호출해야 주변 코스 목록 등 공개 조회에 노출된다.
+    is_shared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     # 시작 좌표는 다른 테이블을 참조하지 않는, Course 자체의 일반 값 컬럼이다.
     start_lat: Mapped[float] = mapped_column(Float, nullable=False)
     start_lng: Mapped[float] = mapped_column(Float, nullable=False)
+
+    # 생성 시 T맵 응답으로 받은 전체 폴리라인을 [[lat, lng], ...] 형태로 저장한다.
+    # 상세조회 시 T맵을 다시 호출하지 않고 그대로 재사용하기 위함.
+    path: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     def touch(self) -> None:
         """CoursePlace 등 자식 엔티티만 바뀌어 Course 행 자체엔 UPDATE가 없을 때,
