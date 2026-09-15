@@ -217,6 +217,31 @@ async def extract_place_candidates_for_category(
             await client.aclose()
 
 
+async def list_nearby_places(
+    category: PlaceSearchCategory,
+    lat: float,
+    lng: float,
+    *,
+    radius: int = _DEFAULT_RADIUS_M,
+    limit: int = 20,
+    client: PetTourClient | None = None,
+) -> list[PlaceCandidate]:
+    """홈 화면 '주변 장소' 카테고리별 목록 조회(1~3단계만 사용 — AI 확정/T맵 경로 없음).
+
+    코스 생성 파이프라인(extract_place_candidates_for_category)과 달리 후보 풀을 더
+    좁히지 않고, limit을 그대로 공공데이터 API 조회 개수(numOfRows)로 써서 반환한다.
+    반려동물 동반 불가 판정으로 걸러진 만큼은 limit보다 적게 반환될 수 있다.
+    """
+    owns_client = client is None
+    client = client or PetTourClient()
+    try:
+        filtered, _success, _failed = await _fetch_and_filter(client, category, lat, lng, radius, limit)
+        return filtered
+    finally:
+        if owns_client:
+            await client.aclose()
+
+
 def _estimate_travel_minutes(dist_m: float) -> float:
     return (dist_m * _ROAD_DETOUR_FACTOR) / _WALK_SPEED_M_PER_MIN
 

@@ -21,6 +21,15 @@ class PlaceCandidate(BaseModel):
     pet_facilities: str | None = None
 
 
+class PlaceListItem(PlaceCandidate):
+    """홈 화면 '주변 장소' 목록 응답. 공공데이터 API에서 받아온 PlaceCandidate 정보
+    그대로에, 내부 place_id와 좋아요 정보만 얹는다."""
+
+    place_id: int
+    like_count: int
+    is_liked: bool
+
+
 class WalkingCourseLeg(BaseModel):
     """산책 코스의 한 구간(경유지 사이)."""
 
