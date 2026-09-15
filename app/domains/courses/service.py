@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -7,14 +8,17 @@ from app.common.geo import bounding_box, haversine_distance_m
 from app.domains.courses.models import Course, CoursePlace
 from app.domains.courses.repository import (
     CoursePlaceEntry,
+    CoursePlaceReplacement,
     add_course_places,
     create_course,
     delete_course,
     get_course_by_id,
     get_course_places_by_course_ids,
     list_courses_within_bounding_box,
+    replace_course_places,
 )
 from app.domains.courses.schemas import CategoryTarget, CourseCategory, CourseCreateRequest, CourseSummary
+from app.domains.logs.models import Log
 from app.domains.places.constants import DEFAULT_STAY_MINUTES, PlaceSearchCategory
 from app.domains.places.repository import get_or_create_places
 from app.domains.places.schemas import WalkingCourseResult
@@ -69,6 +73,7 @@ async def create_course_with_places(
             start_lng=request.start_lng,
             dog_id=dog_id,
             path=result.path,
+            walk_date=request.walk_date,
         )
         entries = [
             CoursePlaceEntry(
@@ -186,6 +191,45 @@ def update_course(db: Session, course_id: int, dog_id: int, **fields: object) ->
 
     for key, value in fields.items():
         setattr(course, key, value)
+
+    db.commit()
+    db.refresh(course)
+    return course
+
+
+def save_course_places(
+    db: Session,
+    course_id: int,
+    dog_id: int,
+    entries: list[CoursePlaceReplacement],
+    path: list[tuple[float, float]],
+    *,
+    ended_at: datetime | None = None,
+) -> Course:
+    """코스 생성(POST) 후 프론트에서 스팟을 삭제/재구성해 코스를 확정할 때 호출한다
+    (소유자만 가능). 서버는 거리/시간을 다시 계산하지 않고 넘어온 값을 그대로 믿는다.
+
+    코스 확정 = 산책 시작이므로, 같은 트랜잭션에서 이 산책의 Log도 새로 만든다.
+    started_at은 Course.walk_date(없으면 저장 시점)로, ended_at은 프론트가 계산해
+    넘긴 값으로 기록한다.
+    """
+    course = get_course_by_id(db, course_id)
+    if course is None:
+        raise NotFoundError("Course", course_id)
+    if course.dog_id != dog_id:
+        raise NotCourseOwnerError
+
+    replace_course_places(db, course_id, entries)
+    course.path = path
+
+    db.add(
+        Log(
+            dog_id=dog_id,
+            course_id=course_id,
+            started_at=course.walk_date or datetime.now(UTC),
+            ended_at=ended_at,
+        )
+    )
 
     db.commit()
     db.refresh(course)

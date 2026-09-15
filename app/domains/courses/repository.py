@@ -1,6 +1,7 @@
 from dataclasses import dataclass
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.domains.courses.models import Course, CoursePlace
@@ -15,9 +16,15 @@ def create_course(
     start_lng: float,
     dog_id: int,
     path: list[tuple[float, float]],
+    walk_date: datetime | None = None,
 ) -> Course:
     course = Course(
-        title=title, start_lat=start_lat, start_lng=start_lng, dog_id=dog_id, path=path
+        title=title,
+        start_lat=start_lat,
+        start_lng=start_lng,
+        dog_id=dog_id,
+        path=path,
+        walk_date=walk_date,
     )
     db.add(course)
     db.flush()
@@ -70,6 +77,38 @@ def list_courses_within_bounding_box(
         Course.start_lng.between(min_lng, max_lng),
     )
     return list(db.scalars(stmt).all())
+
+
+@dataclass
+class CoursePlaceReplacement:
+    place_id: int
+    sequence: int
+    stay_minutes: int | None
+    travel_minutes: int | None
+    travel_distance_meters: int | None
+
+
+def replace_course_places(
+    db: Session, course_id: int, entries: list[CoursePlaceReplacement]
+) -> list[CoursePlace]:
+    """기존 course_places를 전부 지우고 넘어온 구성으로 교체한다. 코스 편집 화면에서
+    프론트가 스팟 삭제/재계산까지 마친 최종 값을 그대로 신뢰해서 저장한다(서버는
+    재계산하지 않음)."""
+    db.execute(delete(CoursePlace).where(CoursePlace.course_id == course_id))
+    course_places = [
+        CoursePlace(
+            course_id=course_id,
+            place_id=entry.place_id,
+            sequence=entry.sequence,
+            stay_minutes=entry.stay_minutes,
+            travel_minutes=entry.travel_minutes,
+            travel_distance_meters=entry.travel_distance_meters,
+        )
+        for entry in entries
+    ]
+    db.add_all(course_places)
+    db.flush()
+    return course_places
 
 
 def get_course_places_by_course_ids(db: Session, course_ids: list[int]) -> list[CoursePlace]:

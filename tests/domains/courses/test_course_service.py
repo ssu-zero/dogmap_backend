@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -59,6 +61,7 @@ def _request() -> CourseCreateRequest:
             CategoryTarget(category=CourseCategory.WALK, count=1),
             CategoryTarget(category=CourseCategory.CAFE, count=1),
         ],
+        walk_date=datetime(2026, 9, 20, 10, 0, tzinfo=UTC),
     )
 
 

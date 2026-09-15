@@ -38,9 +38,8 @@ class Place(TimestampMixin, Base):
         Enum(PlaceCategory, name="place_category"), nullable=False
     )
     image_url: Mapped[str | None] = mapped_column(String(500))
-    # TODO: 영업시간이 보통 "시작~종료" 범위인데 단일 Time 컬럼이라 표현이 제한적이다.
-    # 필요해지면 open_time/close_time 쌍으로 분리 검토.
     open_time: Mapped[time | None] = mapped_column(Time)
+    close_time: Mapped[time | None] = mapped_column(Time)
     rest_day: Mapped[str | None] = mapped_column(String(100))
 
     latitude: Mapped[float] = mapped_column(Float, nullable=False)

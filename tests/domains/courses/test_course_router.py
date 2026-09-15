@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -57,6 +57,7 @@ def _request_body() -> dict:
         "start_lng": 127.0,
         "target_duration_minutes": 60,
         "category_targets": [{"category": "WALK", "count": 1}],
+        "walk_date": "2026-09-20T10:00:00+09:00",
     }
 
 
@@ -137,6 +138,21 @@ def _seed_nearby_course(session_factory, *, dog_id: int | None = 1, is_shared: b
     course_id = course.course_id
     db.close()
     return course_id
+
+
+def test_create_course_computes_visit_time_from_walk_date(client, monkeypatch):
+    async def fake_create_walking_course(*args, **kwargs):
+        return _fixed_result()
+
+    monkeypatch.setattr(courses_service, "create_walking_course", fake_create_walking_course)
+
+    response = client.post("/api/courses", json=_request_body(), headers=_auth_headers())
+
+    assert response.status_code == 201
+    place = response.json()["places"][0]
+    # walk_date(10:00) + travel_minutes(round(2.0)=2분) = 10:02.
+    # SQLite는 DateTime(timezone=True)도 naive로 왕복시키므로 오프셋 없이 비교한다.
+    assert place["visit_time"].startswith("2026-09-20T10:02:00")
 
 
 def test_get_nearby_courses_without_auth_header_is_allowed(client, session_factory):
@@ -220,6 +236,171 @@ def test_get_course_detail_allows_anyone_for_shared_course(client, session_facto
     body = response.json()
     assert body["is_owner"] is False
     assert body["is_shared"] is True
+
+
+def _places_replace_body(place_id: int) -> dict:
+    """places는 코스 생성/조회 응답(CoursePlaceRead)과 동일한 형식이다 — 프론트가 이미
+    받은 응답 객체를 그대로 재사용해서 넘긴다고 가정한 형태."""
+    return {
+        "places": [
+            {
+                "place_id": place_id,
+                "name": "공원",
+                "category": "PARK",
+                "image_url": None,
+                "lat": 37.5,
+                "lng": 127.0,
+                "sequence": 1,
+                "stay_minutes": 20,
+                "travel_minutes": 8,
+                "travel_distance_meters": 450,
+            }
+        ],
+        "path": [[37.5, 127.0], [37.501, 127.0]],
+    }
+
+
+def test_replace_course_places_requires_auth(client, session_factory):
+    course_id = _seed_nearby_course(session_factory)
+
+    response = client.put(f"/api/courses/{course_id}/places", json=_places_replace_body(1))
+
+    assert response.status_code == 401
+
+
+def test_replace_course_places_rejects_non_owner(client, session_factory):
+    course_id = _seed_nearby_course(session_factory, dog_id=1)
+
+    response = client.put(
+        f"/api/courses/{course_id}/places",
+        json=_places_replace_body(1),
+        headers=_auth_headers(dog_id=2),
+    )
+
+    assert response.status_code == 403
+
+
+def test_replace_course_places_returns_404_when_missing(client):
+    response = client.put(
+        "/api/courses/999/places", json=_places_replace_body(1), headers=_auth_headers(dog_id=1)
+    )
+    assert response.status_code == 404
+
+
+def test_replace_course_places_saves_frontend_recalculated_values(client, session_factory):
+    course_id = _seed_nearby_course(session_factory, dog_id=1)
+    db = session_factory()
+    place_id = db.scalars(select(Place)).first().place_id
+    db.close()
+
+    response = client.put(
+        f"/api/courses/{course_id}/places",
+        json=_places_replace_body(place_id),
+        headers=_auth_headers(dog_id=1),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["places"]) == 1
+    assert body["places"][0]["place_id"] == place_id
+    assert body["places"][0]["stay_minutes"] == 20
+    assert body["places"][0]["travel_minutes"] == 8
+    assert body["places"][0]["travel_distance_meters"] == 450
+    assert body["total_distance_meters"] == 450
+    assert body["total_duration_minutes"] == 28
+    assert body["path"] == [[37.5, 127.0], [37.501, 127.0]]
+
+
+def test_replace_course_places_removes_a_place(client, session_factory):
+    park = Place(
+        content_id="park-1", name="공원", category=PlaceCategory.PARK, latitude=37.5, longitude=127.0
+    )
+    cafe = Place(
+        content_id="cafe-1", name="카페", category=PlaceCategory.CAFE, latitude=37.5, longitude=127.0
+    )
+    db = session_factory()
+    db.add_all([park, cafe])
+    db.flush()
+    course = Course(title="코스", start_lat=37.5, start_lng=127.0, dog_id=1)
+    db.add(course)
+    db.flush()
+    db.add_all(
+        [
+            CoursePlace(
+                course_id=course.course_id,
+                place_id=park.place_id,
+                sequence=1,
+                stay_minutes=15,
+                travel_minutes=5,
+                travel_distance_meters=300,
+            ),
+            CoursePlace(
+                course_id=course.course_id,
+                place_id=cafe.place_id,
+                sequence=2,
+                stay_minutes=20,
+                travel_minutes=10,
+                travel_distance_meters=400,
+            ),
+        ]
+    )
+    db.commit()
+    course_id = course.course_id
+    park_id = park.place_id
+    db.close()
+
+    # 카페(2번째 스팟)를 프론트에서 삭제하고 남은 공원만으로 재계산해서 넘긴 상황
+    response = client.put(
+        f"/api/courses/{course_id}/places",
+        json=_places_replace_body(park_id),
+        headers=_auth_headers(dog_id=1),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["places"]) == 1
+    assert body["places"][0]["place_id"] == park_id
+
+
+def test_replace_course_places_creates_log_with_ended_at(client, session_factory):
+    course_id = _seed_nearby_course(session_factory, dog_id=1)
+    db = session_factory()
+    place_id = db.scalars(select(Place)).first().place_id
+    db.close()
+
+    body = _places_replace_body(place_id)
+    body["ended_at"] = "2026-09-20T11:30:00+09:00"
+
+    response = client.put(
+        f"/api/courses/{course_id}/places", json=body, headers=_auth_headers(dog_id=1)
+    )
+
+    assert response.status_code == 200
+
+    logs = client.get("/api/logs", headers=_auth_headers(dog_id=1)).json()
+    assert len(logs) == 1
+    assert logs[0]["course_id"] == course_id
+    assert logs[0]["ended_at"].startswith("2026-09-20T11:30:00")
+
+
+def test_replace_course_places_without_ended_at_creates_log_without_it(client, session_factory):
+    course_id = _seed_nearby_course(session_factory, dog_id=1)
+    db = session_factory()
+    place_id = db.scalars(select(Place)).first().place_id
+    db.close()
+
+    response = client.put(
+        f"/api/courses/{course_id}/places",
+        json=_places_replace_body(place_id),
+        headers=_auth_headers(dog_id=1),
+    )
+
+    assert response.status_code == 200
+
+    logs = client.get("/api/logs", headers=_auth_headers(dog_id=1)).json()
+    assert len(logs) == 1
+    assert logs[0]["ended_at"] is None
+    assert logs[0]["started_at"] is not None
 
 
 def test_share_course_requires_auth(client, session_factory):
