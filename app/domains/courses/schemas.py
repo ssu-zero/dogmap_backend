@@ -1,6 +1,6 @@
 import enum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.domains.places.models import PlaceCategory
 
@@ -48,6 +48,13 @@ class CourseCreateRequest(BaseModel):
     )
 
 
+class CourseUpdate(BaseModel):
+    """코스 메타데이터 수정(소유자만 가능). 보낸 필드만 수정되는 partial update —
+    수정하지 않을 필드는 아예 생략하면 된다."""
+
+    title: str | None = Field(default=None, description="코스 제목", examples=["우리 동네 산책 코스"])
+
+
 class CoursePlaceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -74,12 +81,17 @@ class CourseRead(BaseModel):
     total_duration_minutes: float
     path: list[tuple[float, float]]
     places: list[CoursePlaceRead]
+    is_owner: bool
+    is_shared: bool
+    # 코스 생성 파이프라인 소요시간(ms). 생성 응답에서만 채워지고, 상세조회/공유
+    # 응답에서는 그 시점에 다시 생성한 게 아니므로 None.
+    generation_duration_ms: int | None = None
 
 
 class CourseSummary(BaseModel):
     """코스 목록(주변 코스 조회) 카드용 요약. CoursePlace에 저장된 값을 합산해서
-    총 거리/시간을 만든다 — Course/CoursePlace에는 폴리라인이 저장돼 있지 않으므로
-    path는 포함하지 않는다 (상세 조회는 별도 API 몫)."""
+    총 거리/시간을 만든다 — 목록 카드에는 폴리라인이 필요 없으므로 path는 포함하지 않는다
+    (상세조회 API인 CourseRead에서 Course.path를 반환한다)."""
 
     course_id: int
     title: str
@@ -90,3 +102,4 @@ class CourseSummary(BaseModel):
     total_duration_minutes: int
     place_count: int
     thumbnail_image_url: str | None
+    is_owner: bool

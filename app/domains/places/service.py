@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import random
+import time
 
 from app.common.exceptions import ExternalApiError
 from app.common.geo import haversine_distance_m
@@ -36,7 +37,11 @@ logger = logging.getLogger(__name__)
 # create_walking_course가 1~5단계를 전부 묶는 최상위 진입점이다.
 
 _DEFAULT_RADIUS_M = 2000
-_MAX_RETRIES = 2
+# 카테고리별 후보가 목표 개수에 못 미쳐도 있는 만큼만 써서 코스를 생성하는 정책이므로
+# (finalize_places_with_ai 시스템 프롬프트 참고), 부족분을 메꾸려고 반경을 넓혀 재시도하는
+# 횟수를 최소로 유지한다 — 재시도 1회당 위치기반 목록 조회 + 후보 전체 상세조회 3종 호출
+# 왕복이 통째로 반복되므로, 후보가 희박한 지역에서 재시도 횟수가 곧 최악 케이스 지연이다.
+_MAX_RETRIES = 1
 _DETAIL_CONCURRENCY = 10
 _FAILURE_RATE_THRESHOLD = 0.5
 
@@ -416,6 +421,7 @@ async def build_walking_course(
         total_distance_meters=route.distance_meters,
         total_duration_minutes=route.duration_minutes,
         path=route.path,
+        generation_duration_ms=0,  # create_walking_course가 전체 소요시간으로 덮어씀
     )
 
 
@@ -431,6 +437,7 @@ async def create_walking_course(
 ) -> WalkingCourseResult:
     """1~4단계(장소 후보 조회·AI 확정)에 이어 5단계(T맵 보행자 경로로 실제 코스 생성)까지
     한 번에 실행하는 최상위 진입점."""
+    started = time.perf_counter()
     places = await select_places_for_course(
         category_targets,
         lat,
@@ -439,4 +446,7 @@ async def create_walking_course(
         pet_tour_client=pet_tour_client,
         llm_client=llm_client,
     )
-    return await build_walking_course(places, lat, lng, client=tmap_client)
+    result = await build_walking_course(places, lat, lng, client=tmap_client)
+    elapsed_ms = round((time.perf_counter() - started) * 1000)
+    logger.info("코스 생성 파이프라인 소요시간: %dms (장소 수=%d)", elapsed_ms, len(places))
+    return result.model_copy(update={"generation_duration_ms": elapsed_ms})

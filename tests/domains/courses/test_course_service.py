@@ -3,9 +3,11 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.common.base_model import Base
+from app.common.exceptions import NotFoundError
 from app.domains.courses import service as courses_service
 from app.domains.courses.models import Course, CoursePlace
 from app.domains.courses.schemas import CategoryTarget, CourseCategory, CourseCreateRequest
+from app.domains.courses.service import NotCourseOwnerError
 from app.domains.places.constants import DEFAULT_STAY_MINUTES
 from app.domains.places.models import Place, PlaceCategory
 from app.domains.places.schemas import PlaceCandidate, WalkingCourseLeg, WalkingCourseResult
@@ -44,6 +46,7 @@ def _fixed_result() -> WalkingCourseResult:
         total_distance_meters=301.0,
         total_duration_minutes=5.0,
         path=[(37.5, 127.0), (37.51, 127.01), (37.52, 127.02)],
+        generation_duration_ms=1234,
     )
 
 
@@ -66,13 +69,16 @@ async def test_creates_course_and_course_places_in_order(session, monkeypatch):
     monkeypatch.setattr(courses_service, "create_walking_course", fake_create_walking_course)
 
     course, course_places, result = await courses_service.create_course_with_places(
-        session, _request()
+        session, _request(), dog_id=1
     )
 
     assert course.course_id is not None
     assert course.title == "60분 산책 코스"
     assert course.start_lat == 37.5
     assert course.start_lng == 127.0
+    assert course.dog_id == 1
+    assert course.is_shared is False
+    assert course.path == [[37.5, 127.0], [37.51, 127.01], [37.52, 127.02]]
     assert result.total_distance_meters == 301.0
     assert result.total_duration_minutes == 5.0
 
@@ -94,8 +100,8 @@ async def test_reuses_existing_place_across_course_creations(session, monkeypatc
 
     monkeypatch.setattr(courses_service, "create_walking_course", fake_create_walking_course)
 
-    await courses_service.create_course_with_places(session, _request())
-    await courses_service.create_course_with_places(session, _request())
+    await courses_service.create_course_with_places(session, _request(), dog_id=1)
+    await courses_service.create_course_with_places(session, _request(), dog_id=1)
 
     places = session.scalars(select(Place)).all()
     assert len(places) == 2  # 같은 content_id 재사용, 중복 생성 없음
@@ -109,7 +115,7 @@ async def test_uses_explicit_title_when_provided(session, monkeypatch):
 
     request = _request()
     request.title = "우리 동네 산책"
-    course, _, _ = await courses_service.create_course_with_places(session, request)
+    course, _, _ = await courses_service.create_course_with_places(session, request, dog_id=1)
 
     assert course.title == "우리 동네 산책"
 
@@ -129,10 +135,23 @@ def _seed_place(session, content_id: str, name: str = "장소", image_url: str |
 
 
 def _seed_course(
-    session, *, title: str, start_lat: float, start_lng: float, course_places: list[tuple]
+    session,
+    *,
+    title: str,
+    start_lat: float,
+    start_lng: float,
+    course_places: list[tuple],
+    dog_id: int | None = 1,
+    is_shared: bool = True,
 ) -> Course:
-    """course_places: (place, stay_minutes, travel_minutes, travel_distance_meters) 목록."""
-    course = Course(title=title, start_lat=start_lat, start_lng=start_lng)
+    """course_places: (place, stay_minutes, travel_minutes, travel_distance_meters) 목록.
+
+    is_shared 기본값을 True로 둔 이유: list_nearby_courses는 공개 코스만 보여주므로,
+    비공개 관련 테스트가 아닌 이상 대부분의 기존 테스트는 공개 코스를 시딩해야 한다.
+    """
+    course = Course(
+        title=title, start_lat=start_lat, start_lng=start_lng, dog_id=dog_id, is_shared=is_shared
+    )
     session.add(course)
     session.flush()
     for i, (place, stay, travel_min, travel_dist) in enumerate(course_places, start=1):
@@ -220,3 +239,160 @@ def test_list_nearby_courses_paginates_with_limit_and_offset(session):
     )
 
     assert [c.course_id for c in page] == [courses[1].course_id]
+
+
+def test_list_nearby_courses_excludes_private_courses(session):
+    place = _seed_place(session, "1")
+    _seed_course(
+        session,
+        title="비공개 코스",
+        start_lat=37.501,
+        start_lng=127.0,
+        course_places=[(place, 15, 5, 300)],
+        is_shared=False,
+    )
+
+    result = courses_service.list_nearby_courses(
+        session, lat=37.5, lng=127.0, radius_m=10000, limit=20, offset=0
+    )
+
+    assert result == []
+
+
+def test_list_nearby_courses_marks_is_owner_for_requester(session):
+    place = _seed_place(session, "1")
+    course = _seed_course(
+        session,
+        title="코스",
+        start_lat=37.501,
+        start_lng=127.0,
+        course_places=[(place, 15, 5, 300)],
+        dog_id=1,
+    )
+
+    result = courses_service.list_nearby_courses(
+        session, lat=37.5, lng=127.0, radius_m=10000, limit=20, offset=0, requester_dog_id=1
+    )
+    other = courses_service.list_nearby_courses(
+        session, lat=37.5, lng=127.0, radius_m=10000, limit=20, offset=0, requester_dog_id=2
+    )
+
+    assert next(c for c in result if c.course_id == course.course_id).is_owner is True
+    assert next(c for c in other if c.course_id == course.course_id).is_owner is False
+
+
+def test_get_course_detail_returns_none_for_private_course_and_non_owner(session):
+    place = _seed_place(session, "1")
+    course = _seed_course(
+        session,
+        title="비공개 코스",
+        start_lat=37.5,
+        start_lng=127.0,
+        course_places=[(place, 15, 5, 300)],
+        dog_id=1,
+        is_shared=False,
+    )
+
+    assert courses_service.get_course_detail(session, course.course_id, None) is None
+    assert courses_service.get_course_detail(session, course.course_id, 2) is None
+
+    detail = courses_service.get_course_detail(session, course.course_id, 1)
+    assert detail is not None
+    assert detail[2] is True  # is_owner
+
+
+def test_get_course_detail_returns_none_for_missing_course(session):
+    assert courses_service.get_course_detail(session, 999, None) is None
+
+
+def test_get_course_detail_allows_anyone_for_shared_course(session):
+    place = _seed_place(session, "1")
+    course = _seed_course(
+        session,
+        title="공개 코스",
+        start_lat=37.5,
+        start_lng=127.0,
+        course_places=[(place, 15, 5, 300)],
+        dog_id=1,
+        is_shared=True,
+    )
+
+    detail = courses_service.get_course_detail(session, course.course_id, None)
+    assert detail is not None
+    assert detail[2] is False  # is_owner
+
+
+def test_share_course_sets_is_shared_for_owner(session):
+    place = _seed_place(session, "1")
+    course = _seed_course(
+        session,
+        title="코스",
+        start_lat=37.5,
+        start_lng=127.0,
+        course_places=[(place, 15, 5, 300)],
+        dog_id=1,
+        is_shared=False,
+    )
+
+    updated = courses_service.share_course(session, course.course_id, 1)
+
+    assert updated.is_shared is True
+
+
+def test_share_course_raises_for_non_owner(session):
+    place = _seed_place(session, "1")
+    course = _seed_course(
+        session,
+        title="코스",
+        start_lat=37.5,
+        start_lng=127.0,
+        course_places=[(place, 15, 5, 300)],
+        dog_id=1,
+        is_shared=False,
+    )
+
+    with pytest.raises(NotCourseOwnerError):
+        courses_service.share_course(session, course.course_id, 2)
+
+
+def test_share_course_raises_not_found_for_missing_course(session):
+    with pytest.raises(NotFoundError):
+        courses_service.share_course(session, 999, 1)
+
+
+def test_delete_course_by_id_removes_course_for_owner(session):
+    place = _seed_place(session, "1")
+    course = _seed_course(
+        session,
+        title="코스",
+        start_lat=37.5,
+        start_lng=127.0,
+        course_places=[(place, 15, 5, 300)],
+        dog_id=1,
+    )
+
+    courses_service.delete_course_by_id(session, course.course_id, 1)
+
+    assert session.get(Course, course.course_id) is None
+
+
+def test_delete_course_by_id_raises_for_non_owner(session):
+    place = _seed_place(session, "1")
+    course = _seed_course(
+        session,
+        title="코스",
+        start_lat=37.5,
+        start_lng=127.0,
+        course_places=[(place, 15, 5, 300)],
+        dog_id=1,
+    )
+
+    with pytest.raises(NotCourseOwnerError):
+        courses_service.delete_course_by_id(session, course.course_id, 2)
+
+    assert session.get(Course, course.course_id) is not None
+
+
+def test_delete_course_by_id_raises_not_found_for_missing_course(session):
+    with pytest.raises(NotFoundError):
+        courses_service.delete_course_by_id(session, 999, 1)
