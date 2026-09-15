@@ -14,15 +14,19 @@ from app.domains.courses.repository import (
     delete_course,
     get_course_by_id,
     get_course_places_by_course_ids,
+    get_courses_by_ids,
+    list_courses_by_dog_id,
     list_courses_within_bounding_box,
     replace_course_places,
 )
 from app.domains.courses.schemas import CategoryTarget, CourseCategory, CourseCreateRequest, CourseSummary
+from app.domains.likes import repository as likes_repository
 from app.domains.logs.models import Log
 from app.domains.places.constants import DEFAULT_STAY_MINUTES, PlaceSearchCategory
 from app.domains.places.repository import get_or_create_places
 from app.domains.places.schemas import WalkingCourseResult
 from app.domains.places.service import create_walking_course
+from app.domains.saves import repository as saves_repository
 
 
 class NotCourseOwnerError(Exception):
@@ -95,6 +99,57 @@ async def create_course_with_places(
     return course, course_places, result
 
 
+def _to_course_summary(
+    course: Course,
+    course_places: list[CoursePlace],
+    *,
+    distance_meters: int | None,
+    requester_dog_id: int | None,
+    like_count: int,
+    is_liked: bool,
+    save_count: int,
+    is_saved: bool,
+) -> CourseSummary:
+    return CourseSummary(
+        course_id=course.course_id,
+        title=course.title,
+        start_lat=course.start_lat,
+        start_lng=course.start_lng,
+        distance_meters=distance_meters,
+        total_distance_meters=sum(cp.travel_distance_meters or 0 for cp in course_places),
+        total_duration_minutes=sum(
+            (cp.stay_minutes or 0) + (cp.travel_minutes or 0) for cp in course_places
+        ),
+        place_count=len(course_places),
+        thumbnail_image_url=course_places[0].place.image_url if course_places else None,
+        is_owner=requester_dog_id is not None and course.dog_id == requester_dog_id,
+        like_count=like_count,
+        is_liked=is_liked,
+        save_count=save_count,
+        is_saved=is_saved,
+    )
+
+
+def _engagement_lookup(
+    db: Session, course_ids: list[int], requester_dog_id: int | None
+) -> tuple[dict[int, int], set[int], dict[int, int], set[int]]:
+    """course_ids에 대한 좋아요/저장 카운트와, requester_dog_id가 좋아요/저장한
+    course_id 집합을 배치 조회한다(목록 크기와 무관하게 쿼리 4번 고정 — N+1 방지)."""
+    like_counts = likes_repository.count_by_course_ids(db, course_ids)
+    save_counts = saves_repository.count_by_course_ids(db, course_ids)
+    liked_ids = (
+        likes_repository.liked_course_ids(db, requester_dog_id, course_ids)
+        if requester_dog_id is not None
+        else set()
+    )
+    saved_ids = (
+        saves_repository.saved_course_ids(db, requester_dog_id, course_ids)
+        if requester_dog_id is not None
+        else set()
+    )
+    return like_counts, liked_ids, save_counts, saved_ids
+
+
 def list_nearby_courses(
     db: Session,
     *,
@@ -123,31 +178,85 @@ def list_nearby_courses(
     within_radius.sort(key=lambda pair: pair[1])
     page = within_radius[offset : offset + limit]
 
-    course_places = get_course_places_by_course_ids(db, [course.course_id for course, _ in page])
+    course_ids = [course.course_id for course, _ in page]
+    course_places = get_course_places_by_course_ids(db, course_ids)
     places_by_course: dict[int, list[CoursePlace]] = defaultdict(list)
     for cp in course_places:
         places_by_course[cp.course_id].append(cp)
 
-    summaries = []
-    for course, distance in page:
-        cps = places_by_course.get(course.course_id, [])
-        summaries.append(
-            CourseSummary(
-                course_id=course.course_id,
-                title=course.title,
-                start_lat=course.start_lat,
-                start_lng=course.start_lng,
-                distance_meters=round(distance),
-                total_distance_meters=sum(cp.travel_distance_meters or 0 for cp in cps),
-                total_duration_minutes=sum(
-                    (cp.stay_minutes or 0) + (cp.travel_minutes or 0) for cp in cps
-                ),
-                place_count=len(cps),
-                thumbnail_image_url=cps[0].place.image_url if cps else None,
-                is_owner=requester_dog_id is not None and course.dog_id == requester_dog_id,
-            )
+    like_counts, liked_ids, save_counts, saved_ids = _engagement_lookup(
+        db, course_ids, requester_dog_id
+    )
+
+    return [
+        _to_course_summary(
+            course,
+            places_by_course.get(course.course_id, []),
+            distance_meters=round(distance),
+            requester_dog_id=requester_dog_id,
+            like_count=like_counts.get(course.course_id, 0),
+            is_liked=course.course_id in liked_ids,
+            save_count=save_counts.get(course.course_id, 0),
+            is_saved=course.course_id in saved_ids,
         )
-    return summaries
+        for course, distance in page
+    ]
+
+
+def list_saved_courses(db: Session, dog_id: int) -> list[CourseSummary]:
+    """내가 저장(북마크)한 코스를 저장한 순서(최신순)로 반환한다. 좌표 기준 조회가
+    아니므로 distance_meters는 없다(None)."""
+    course_ids = saves_repository.list_course_ids_by_dog_id(db, dog_id)
+    courses_by_id = {course.course_id: course for course in get_courses_by_ids(db, course_ids)}
+
+    course_places = get_course_places_by_course_ids(db, course_ids)
+    places_by_course: dict[int, list[CoursePlace]] = defaultdict(list)
+    for cp in course_places:
+        places_by_course[cp.course_id].append(cp)
+
+    like_counts, liked_ids, save_counts, saved_ids = _engagement_lookup(db, course_ids, dog_id)
+
+    return [
+        _to_course_summary(
+            courses_by_id[course_id],
+            places_by_course.get(course_id, []),
+            distance_meters=None,
+            requester_dog_id=dog_id,
+            like_count=like_counts.get(course_id, 0),
+            is_liked=course_id in liked_ids,
+            save_count=save_counts.get(course_id, 0),
+            is_saved=course_id in saved_ids,
+        )
+        for course_id in course_ids
+    ]
+
+
+def list_my_courses(db: Session, dog_id: int) -> list[CourseSummary]:
+    """내가 만든 코스 전부(공개 여부 무관)를 최신순으로 반환한다. 좌표 기준 조회가
+    아니므로 distance_meters는 없다(None)."""
+    courses = list_courses_by_dog_id(db, dog_id)
+    course_ids = [course.course_id for course in courses]
+
+    course_places = get_course_places_by_course_ids(db, course_ids)
+    places_by_course: dict[int, list[CoursePlace]] = defaultdict(list)
+    for cp in course_places:
+        places_by_course[cp.course_id].append(cp)
+
+    like_counts, liked_ids, save_counts, saved_ids = _engagement_lookup(db, course_ids, dog_id)
+
+    return [
+        _to_course_summary(
+            course,
+            places_by_course.get(course.course_id, []),
+            distance_meters=None,
+            requester_dog_id=dog_id,
+            like_count=like_counts.get(course.course_id, 0),
+            is_liked=course.course_id in liked_ids,
+            save_count=save_counts.get(course.course_id, 0),
+            is_saved=course.course_id in saved_ids,
+        )
+        for course in courses
+    ]
 
 
 def get_course_detail(
