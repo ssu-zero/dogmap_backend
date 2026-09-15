@@ -1,4 +1,5 @@
 import enum
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,6 +32,7 @@ class CourseCreateRequest(BaseModel):
     target_duration_minutes: int
     category_targets: list[CategoryTarget]
     title: str | None = None
+    walk_date: datetime = Field(description="산책을 시작할 예정 일시")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -43,6 +45,7 @@ class CourseCreateRequest(BaseModel):
                     {"category": "CAFE", "count": 1},
                 ],
                 "title": "우리 동네 산책 코스",
+                "walk_date": "2026-09-20T10:00:00+09:00",
             }
         }
     )
@@ -53,6 +56,7 @@ class CourseUpdate(BaseModel):
     수정하지 않을 필드는 아예 생략하면 된다."""
 
     title: str | None = Field(default=None, description="코스 제목", examples=["우리 동네 산책 코스"])
+    walk_date: datetime | None = Field(default=None, description="산책을 시작할 예정 일시")
 
 
 class CoursePlaceRead(BaseModel):
@@ -68,6 +72,23 @@ class CoursePlaceRead(BaseModel):
     stay_minutes: int | None
     travel_minutes: int | None
     travel_distance_meters: int | None
+    # Course.walk_date에 이전 스팟들의 travel_minutes/stay_minutes를 누적해서 계산한 도착
+    # 예정 시각. DB에 저장하지 않고 응답 생성 시점에 매번 계산한다(courses/router.py 참고).
+    visit_time: datetime | None = None
+
+
+class CoursePlacesReplaceRequest(BaseModel):
+    """코스 생성(POST) 후 프론트에서 스팟을 삭제/재구성해 코스를 확정할 때 호출한다
+    (소유자만 가능). places는 코스 생성/조회 응답과 동일한 형식(CoursePlaceRead)을 그대로
+    받는다 — 프론트가 이미 갖고 있는 응답 객체를 그대로 재사용하면 된다. 서버는 거리/시간을
+    다시 계산하지 않고 넘어온 값을 그대로 신뢰해서 저장하며, 이 확정과 함께 산책 기록
+    (Log)도 새로 만든다."""
+
+    places: list[CoursePlaceRead]
+    path: list[tuple[float, float]]
+    ended_at: datetime | None = Field(
+        default=None, description="산책 종료 예정 시각(최종 스팟의 종료 시간). 새로 만들 산책 기록의 ended_at으로 쓰인다"
+    )
 
 
 class CourseRead(BaseModel):
@@ -77,6 +98,7 @@ class CourseRead(BaseModel):
     title: str
     start_lat: float
     start_lng: float
+    walk_date: datetime | None
     total_distance_meters: float
     total_duration_minutes: float
     path: list[tuple[float, float]]

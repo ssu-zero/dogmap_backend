@@ -1,7 +1,17 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, BigInteger, Boolean, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.base_model import Base, TimestampMixin
@@ -30,6 +40,12 @@ class Course(TimestampMixin, Base):
     # 시작 좌표는 다른 테이블을 참조하지 않는, Course 자체의 일반 값 컬럼이다.
     start_lat: Mapped[float] = mapped_column(Float, nullable=False)
     start_lng: Mapped[float] = mapped_column(Float, nullable=False)
+
+    # 산책을 시작할 예정 일시. CoursePlace.visit_time은 이 값에 구간별
+    # travel_minutes/stay_minutes를 누적해서 계산하며 별도로 저장하지 않는다
+    # (courses/router.py 참고). API 레벨에서는 필수지만, 과거 방식으로 만들어진
+    # 행과의 호환을 위해 컬럼 자체는 nullable로 둔다.
+    walk_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # 생성 시 T맵 응답으로 받은 전체 폴리라인을 [[lat, lng], ...] 형태로 저장한다.
     # 상세조회 시 T맵을 다시 호출하지 않고 그대로 재사용하기 위함.

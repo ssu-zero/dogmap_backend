@@ -18,9 +18,8 @@ PLACE_CATEGORY_BY_SEARCH_CATEGORY: dict[PlaceSearchCategory, PlaceCategory] = {
 def get_or_create_places(db: Session, candidates: list[PlaceCandidate]) -> dict[str, Place]:
     """content_id 기준으로 Place를 조회하고, 없는 것만 새로 만든다.
 
-    open_time은 저장하지 않는다 — PlaceCandidate.open_time은 "09:00~18:00" 같은 자유
-    텍스트라 Place.open_time(단일 Time 컬럼)에 바로 담을 수 없다 (Place 모델 주석의
-    기존 TODO 참고, 이번 작업 범위 밖).
+    영업시간은 저장하지 않는다 — PlaceCandidate.open_time은 "09:00~18:00" 같은 자유
+    텍스트라 Place.open_time/close_time에 저장하려면 별도 파싱이 필요하다.
     """
     if not candidates:
         return {}
