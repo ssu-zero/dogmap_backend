@@ -34,6 +34,27 @@ def liked_place_ids(db: Session, dog_id: int, place_ids: list[int]) -> set[int]:
     return set(db.scalars(stmt).all())
 
 
+def count_by_course_ids(db: Session, course_ids: list[int]) -> dict[int, int]:
+    """course_id별 좋아요 개수(배치). 좋아요가 없는 course_id는 결과에 나타나지 않으므로
+    호출부에서 dict.get(course_id, 0)으로 조회해야 한다."""
+    if not course_ids:
+        return {}
+    stmt = (
+        select(Like.course_id, func.count(Like.like_id))
+        .where(Like.course_id.in_(course_ids))
+        .group_by(Like.course_id)
+    )
+    return dict(db.execute(stmt).all())
+
+
+def liked_course_ids(db: Session, dog_id: int, course_ids: list[int]) -> set[int]:
+    """course_ids 중 dog_id가 좋아요한 course_id 집합(배치)."""
+    if not course_ids:
+        return set()
+    stmt = select(Like.course_id).where(Like.dog_id == dog_id, Like.course_id.in_(course_ids))
+    return set(db.scalars(stmt).all())
+
+
 def get_by_dog_and_course(db: Session, dog_id: int, course_id: int) -> Like | None:
     stmt = select(Like).where(Like.dog_id == dog_id, Like.course_id == course_id)
     return db.scalars(stmt).one_or_none()

@@ -35,6 +35,23 @@ def get_course_by_id(db: Session, course_id: int) -> Course | None:
     return db.get(Course, course_id)
 
 
+def get_courses_by_ids(db: Session, course_ids: list[int]) -> list[Course]:
+    if not course_ids:
+        return []
+    stmt = select(Course).where(Course.course_id.in_(course_ids))
+    return list(db.scalars(stmt).all())
+
+
+def list_courses_by_dog_id(db: Session, dog_id: int) -> list[Course]:
+    """dog_id가 만든 코스 전부(공개 여부 무관)를 최신순으로 반환한다."""
+    stmt = (
+        select(Course)
+        .where(Course.dog_id == dog_id)
+        .order_by(Course.created_at.desc(), Course.course_id.desc())
+    )
+    return list(db.scalars(stmt).all())
+
+
 def delete_course(db: Session, course: Course) -> None:
     db.delete(course)
     db.flush()

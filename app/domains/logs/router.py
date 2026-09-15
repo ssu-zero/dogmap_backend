@@ -4,10 +4,9 @@ from sqlalchemy.orm import Session
 from app.common.exceptions import NotFoundError
 from app.core.database import get_db
 from app.core.security import get_current_dog_id
-from app.domains.logs.schemas import LogCreate, LogRead, LogUpdate
+from app.domains.logs.schemas import LogRead, LogUpdate
 from app.domains.logs.service import (
     NotLogOwnerError,
-    create_log,
     get_log_for_owner,
     list_logs_for_dog,
     update_log,
@@ -25,17 +24,6 @@ def list_logs_endpoint(
 ) -> list[LogRead]:
     """내가 기록한 산책을 최신순으로 조회한다."""
     return list_logs_for_dog(db, dog_id)
-
-
-@router.post("", response_model=LogRead, status_code=201, summary="산책 기록 생성")
-def create_log_endpoint(
-    body: LogCreate,
-    db: Session = Depends(get_db),
-    dog_id: int = Depends(get_current_dog_id),
-) -> LogRead:
-    """코스를 선택해 산책을 시작하면 호출한다. course_id를 생략하면 코스 없는 자유
-    산책으로 기록된다."""
-    return create_log(db, dog_id, body.course_id)
 
 
 @router.get("/{log_id}", response_model=LogRead, summary="산책 기록 상세 조회")

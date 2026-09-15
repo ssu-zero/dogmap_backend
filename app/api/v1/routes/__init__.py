@@ -6,6 +6,7 @@ from app.domains.dogs.router import router as dogs_router
 from app.domains.likes.router import router as likes_router
 from app.domains.logs.router import router as logs_router
 from app.domains.places.router import router as places_router
+from app.domains.saves.router import router as saves_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -14,3 +15,4 @@ api_router.include_router(courses_router)
 api_router.include_router(likes_router)
 api_router.include_router(logs_router)
 api_router.include_router(places_router)
+api_router.include_router(saves_router)

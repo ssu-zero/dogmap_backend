@@ -26,7 +26,9 @@ from app.domains.courses.service import (
     share_course,
     update_course,
 )
+from app.domains.likes import repository as likes_repository
 from app.domains.places.schemas import WalkingCourseResult
+from app.domains.saves import repository as saves_repository
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
@@ -51,6 +53,16 @@ def _compute_visit_times(
     return visit_times
 
 
+def _engagement_info(db: Session, course_id: int, dog_id: int | None) -> tuple[int, bool, int, bool]:
+    """(like_count, is_liked, save_count, is_saved). dog_id가 없으면(비로그인) is_liked/
+    is_saved는 항상 False다."""
+    like_count = likes_repository.count_by_course_id(db, course_id)
+    save_count = saves_repository.count_by_course_id(db, course_id)
+    is_liked = dog_id is not None and likes_repository.get_by_dog_and_course(db, dog_id, course_id) is not None
+    is_saved = dog_id is not None and saves_repository.get_by_dog_and_course(db, dog_id, course_id) is not None
+    return like_count, is_liked, save_count, is_saved
+
+
 def _to_course_place_read(cp: CoursePlace, visit_time: datetime | None) -> CoursePlaceRead:
     return CoursePlaceRead(
         place_id=cp.place.place_id,
@@ -73,6 +85,10 @@ def _to_course_read(
     result: WalkingCourseResult,
     *,
     is_owner: bool,
+    like_count: int,
+    is_liked: bool,
+    save_count: int,
+    is_saved: bool,
 ) -> CourseRead:
     """코스 생성 직후, 방금 계산한 WalkingCourseResult로 응답을 만든다."""
     ordered = sorted(course_places, key=lambda cp: cp.sequence)
@@ -91,12 +107,23 @@ def _to_course_read(
         ],
         is_owner=is_owner,
         is_shared=course.is_shared,
+        like_count=like_count,
+        is_liked=is_liked,
+        save_count=save_count,
+        is_saved=is_saved,
         generation_duration_ms=result.generation_duration_ms,
     )
 
 
 def _to_course_read_from_db(
-    course: Course, course_places: list[CoursePlace], *, is_owner: bool
+    course: Course,
+    course_places: list[CoursePlace],
+    *,
+    is_owner: bool,
+    like_count: int,
+    is_liked: bool,
+    save_count: int,
+    is_saved: bool,
 ) -> CourseRead:
     """상세조회/공유 응답용. T맵을 다시 부르지 않고 DB에 저장된 값(path, CoursePlace 합산)만
     으로 구성한다."""
@@ -118,6 +145,10 @@ def _to_course_read_from_db(
         ],
         is_owner=is_owner,
         is_shared=course.is_shared,
+        like_count=like_count,
+        is_liked=is_liked,
+        save_count=save_count,
+        is_saved=is_saved,
     )
 
 
@@ -146,7 +177,17 @@ async def create_course(
         course, course_places, result = await create_course_with_places(db, request, dog_id)
     except ExternalApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return _to_course_read(course, course_places, result, is_owner=True)
+    # 방금 만든 코스라 아직 아무도 좋아요/저장을 남길 수 없었다 — 조회 없이 0/False로 채운다.
+    return _to_course_read(
+        course,
+        course_places,
+        result,
+        is_owner=True,
+        like_count=0,
+        is_liked=False,
+        save_count=0,
+        is_saved=False,
+    )
 
 
 @router.get("/{course_id}", response_model=CourseRead, summary="코스 상세 조회")
@@ -161,7 +202,16 @@ async def get_course(
     if detail is None:
         raise HTTPException(status_code=404, detail=_COURSE_NOT_FOUND_DETAIL)
     course, course_places, is_owner = detail
-    return _to_course_read_from_db(course, course_places, is_owner=is_owner)
+    like_count, is_liked, save_count, is_saved = _engagement_info(db, course_id, dog_id)
+    return _to_course_read_from_db(
+        course,
+        course_places,
+        is_owner=is_owner,
+        like_count=like_count,
+        is_liked=is_liked,
+        save_count=save_count,
+        is_saved=is_saved,
+    )
 
 
 @router.patch("/{course_id}", response_model=CourseRead, summary="코스 수정")
@@ -182,7 +232,16 @@ async def update_course_endpoint(
         raise HTTPException(status_code=403, detail="본인이 만든 코스만 수정할 수 있습니다") from exc
 
     course_places = get_course_places_by_course_ids(db, [course_id])
-    return _to_course_read_from_db(course, course_places, is_owner=True)
+    like_count, is_liked, save_count, is_saved = _engagement_info(db, course_id, dog_id)
+    return _to_course_read_from_db(
+        course,
+        course_places,
+        is_owner=True,
+        like_count=like_count,
+        is_liked=is_liked,
+        save_count=save_count,
+        is_saved=is_saved,
+    )
 
 
 @router.put(
@@ -217,7 +276,16 @@ async def replace_course_places_endpoint(
         raise HTTPException(status_code=403, detail="본인이 만든 코스만 수정할 수 있습니다") from exc
 
     course_places = get_course_places_by_course_ids(db, [course_id])
-    return _to_course_read_from_db(course, course_places, is_owner=True)
+    like_count, is_liked, save_count, is_saved = _engagement_info(db, course_id, dog_id)
+    return _to_course_read_from_db(
+        course,
+        course_places,
+        is_owner=True,
+        like_count=like_count,
+        is_liked=is_liked,
+        save_count=save_count,
+        is_saved=is_saved,
+    )
 
 
 @router.post("/{course_id}/share", response_model=CourseRead, summary="코스 공유(전체 공개)")
@@ -236,7 +304,16 @@ async def share_course_endpoint(
         raise HTTPException(status_code=403, detail="본인이 만든 코스만 공유할 수 있습니다") from exc
 
     course_places = get_course_places_by_course_ids(db, [course_id])
-    return _to_course_read_from_db(course, course_places, is_owner=True)
+    like_count, is_liked, save_count, is_saved = _engagement_info(db, course_id, dog_id)
+    return _to_course_read_from_db(
+        course,
+        course_places,
+        is_owner=True,
+        like_count=like_count,
+        is_liked=is_liked,
+        save_count=save_count,
+        is_saved=is_saved,
+    )
 
 
 @router.delete("/{course_id}", status_code=204, summary="코스 삭제")

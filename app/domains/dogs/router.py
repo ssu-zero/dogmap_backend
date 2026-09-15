@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import create_access_token, get_current_dog_id, get_signup_kakao_id
+from app.domains.courses.schemas import CourseSummary
+from app.domains.courses.service import list_my_courses
 from app.domains.dogs import repository
 from app.domains.dogs.schemas import DogCreate, DogResponse, DogUpdate, SignupCompleteResponse
 
@@ -82,3 +84,16 @@ def update_my_profile(
         return dog
 
     return repository.update(db, dog, **update_data)
+
+
+@router.get(
+    "/me/courses",
+    response_model=list[CourseSummary],
+    summary="내 코스 목록 조회",
+    description="내가 만든 코스를 공개 여부와 무관하게 전부 최신순으로 조회한다.",
+)
+def get_my_courses(
+    dog_id: int = Depends(get_current_dog_id),
+    db: Session = Depends(get_db),
+) -> list[CourseSummary]:
+    return list_my_courses(db, dog_id)

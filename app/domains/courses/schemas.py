@@ -105,23 +105,33 @@ class CourseRead(BaseModel):
     places: list[CoursePlaceRead]
     is_owner: bool
     is_shared: bool
+    like_count: int
+    is_liked: bool
+    save_count: int
+    is_saved: bool
     # 코스 생성 파이프라인 소요시간(ms). 생성 응답에서만 채워지고, 상세조회/공유
     # 응답에서는 그 시점에 다시 생성한 게 아니므로 None.
     generation_duration_ms: int | None = None
 
 
 class CourseSummary(BaseModel):
-    """코스 목록(주변 코스 조회) 카드용 요약. CoursePlace에 저장된 값을 합산해서
-    총 거리/시간을 만든다 — 목록 카드에는 폴리라인이 필요 없으므로 path는 포함하지 않는다
-    (상세조회 API인 CourseRead에서 Course.path를 반환한다)."""
+    """코스 목록(주변 코스 조회, 저장한 코스 조회) 카드용 요약. CoursePlace에 저장된 값을
+    합산해서 총 거리/시간을 만든다 — 목록 카드에는 폴리라인이 필요 없으므로 path는
+    포함하지 않는다(상세조회 API인 CourseRead에서 Course.path를 반환한다)."""
 
     course_id: int
     title: str
     start_lat: float
     start_lng: float
-    distance_meters: int  # 조회 좌표 기준 거리
+    # 조회 좌표 기준 거리. 좌표 기준 조회(주변 코스)가 아닌 목록(저장한 코스 등)에서는
+    # 기준 좌표 자체가 없으므로 None.
+    distance_meters: int | None = None
     total_distance_meters: int
     total_duration_minutes: int
     place_count: int
     thumbnail_image_url: str | None
     is_owner: bool
+    like_count: int
+    is_liked: bool
+    save_count: int
+    is_saved: bool

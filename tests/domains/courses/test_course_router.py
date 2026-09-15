@@ -199,6 +199,27 @@ def test_get_nearby_courses_marks_is_owner_when_authenticated(client, session_fa
     assert response.json()[0]["is_owner"] is True
 
 
+def test_get_nearby_courses_reflects_like_and_save_counts(client, session_factory):
+    course_id = _seed_nearby_course(session_factory, dog_id=1, is_shared=True)
+    client.post(f"/api/courses/{course_id}/like", headers=_auth_headers(dog_id=1))
+    client.post(f"/api/courses/{course_id}/save", headers=_auth_headers(dog_id=2))
+
+    as_liker = client.get(
+        "/api/courses", params={"lat": 37.5, "lng": 127.0}, headers=_auth_headers(dog_id=1)
+    ).json()[0]
+    as_other = client.get(
+        "/api/courses", params={"lat": 37.5, "lng": 127.0}, headers=_auth_headers(dog_id=2)
+    ).json()[0]
+
+    assert as_liker["like_count"] == 1
+    assert as_liker["is_liked"] is True
+    assert as_liker["save_count"] == 1
+    assert as_liker["is_saved"] is False
+
+    assert as_other["is_liked"] is False
+    assert as_other["is_saved"] is True
+
+
 def test_get_course_detail_returns_404_when_missing(client):
     response = client.get("/api/courses/999")
     assert response.status_code == 404
@@ -236,6 +257,34 @@ def test_get_course_detail_allows_anyone_for_shared_course(client, session_facto
     body = response.json()
     assert body["is_owner"] is False
     assert body["is_shared"] is True
+
+
+def test_get_course_detail_reflects_like_and_save_counts(client, session_factory):
+    course_id = _seed_nearby_course(session_factory, dog_id=1, is_shared=True)
+    client.post(f"/api/courses/{course_id}/like", headers=_auth_headers(dog_id=2))
+
+    response = client.get(f"/api/courses/{course_id}", headers=_auth_headers(dog_id=2))
+
+    body = response.json()
+    assert body["like_count"] == 1
+    assert body["is_liked"] is True
+    assert body["save_count"] == 0
+    assert body["is_saved"] is False
+
+
+def test_create_course_has_zero_engagement(client, monkeypatch):
+    async def fake_create_walking_course(*args, **kwargs):
+        return _fixed_result()
+
+    monkeypatch.setattr(courses_service, "create_walking_course", fake_create_walking_course)
+
+    response = client.post("/api/courses", json=_request_body(), headers=_auth_headers())
+
+    body = response.json()
+    assert body["like_count"] == 0
+    assert body["is_liked"] is False
+    assert body["save_count"] == 0
+    assert body["is_saved"] is False
 
 
 def _places_replace_body(place_id: int) -> dict:
