@@ -1,14 +1,7 @@
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
-class LikeCreate(BaseModel):
+class CourseLikeStatus(BaseModel):
     course_id: int
-    dog_id: int
-
-
-class LikeResponse(LikeCreate):
-    model_config = ConfigDict(from_attributes=True)
-
-    created_at: datetime
+    is_liked: bool
+    like_count: int

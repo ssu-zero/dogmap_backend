@@ -1,14 +1,7 @@
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
-class SaveCreate(BaseModel):
+class CourseSaveStatus(BaseModel):
     course_id: int
-    dog_id: int
-
-
-class SaveResponse(SaveCreate):
-    model_config = ConfigDict(from_attributes=True)
-
-    created_at: datetime
+    is_saved: bool
+    save_count: int

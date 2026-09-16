@@ -1,50 +1,358 @@
+from collections import defaultdict
+from datetime import UTC, datetime
+
 from sqlalchemy.orm import Session
 
 from app.common.exceptions import NotFoundError
-from app.domains.courses import repository
-from app.domains.courses.models import Course
-from app.domains.courses.schemas import CourseCreate, CourseGenerateRequest
+from app.common.geo import bounding_box, haversine_distance_m
+from app.domains.courses.models import Course, CoursePlace
+from app.domains.courses.repository import (
+    CoursePlaceEntry,
+    CoursePlaceReplacement,
+    add_course_places,
+    create_course,
+    delete_course,
+    get_course_by_id,
+    get_course_places_by_course_ids,
+    get_courses_by_ids,
+    list_courses_by_dog_id,
+    list_courses_within_bounding_box,
+    replace_course_places,
+)
+from app.domains.courses.schemas import CategoryTarget, CourseCategory, CourseCreateRequest, CourseSummary
+from app.domains.likes import repository as likes_repository
+from app.domains.logs.models import Log
+from app.domains.places.constants import DEFAULT_STAY_MINUTES, PlaceSearchCategory
+from app.domains.places.repository import get_or_create_places
+from app.domains.places.schemas import WalkingCourseResult
+from app.domains.places.service import create_walking_course
+from app.domains.saves import repository as saves_repository
 
 
-def get_course_or_404(db: Session, course_id: int) -> Course:
-    course = repository.get_course(db, course_id)
+class NotCourseOwnerError(Exception):
+    """요청자가 해당 코스의 소유자가 아닐 때(공유/삭제 API에서 사용)."""
+
+
+# 요청 스키마의 CourseCategory(영문, Swagger enum 노출용)를 places 파이프라인이 쓰는
+# PlaceSearchCategory(한글)로 변환한다.
+_PLACE_SEARCH_CATEGORY_BY_COURSE_CATEGORY: dict[CourseCategory, PlaceSearchCategory] = {
+    CourseCategory.FOOD: PlaceSearchCategory.RESTAURANT,
+    CourseCategory.CAFE: PlaceSearchCategory.CAFE,
+    CourseCategory.WALK: PlaceSearchCategory.WALK,
+    CourseCategory.ACTIVITY: PlaceSearchCategory.ACTIVITY,
+}
+
+
+def _default_title(request: CourseCreateRequest) -> str:
+    return f"{request.target_duration_minutes}분 산책 코스"
+
+
+def _to_place_search_category_targets(
+    category_targets: list[CategoryTarget],
+) -> dict[PlaceSearchCategory, int]:
+    return {
+        _PLACE_SEARCH_CATEGORY_BY_COURSE_CATEGORY[target.category]: target.count
+        for target in category_targets
+    }
+
+
+async def create_course_with_places(
+    db: Session, request: CourseCreateRequest, dog_id: int
+) -> tuple[Course, list[CoursePlace], WalkingCourseResult]:
+    """코스 생성 파이프라인(places.service.create_walking_course)을 실행하고 결과를
+    Course/CoursePlace로 영속화한다. dog_id는 코스 생성자(소유자)로 저장된다."""
+    result = await create_walking_course(
+        _to_place_search_category_targets(request.category_targets),
+        request.start_lat,
+        request.start_lng,
+        request.target_duration_minutes,
+    )
+
+    try:
+        places_by_content_id = get_or_create_places(db, result.stops)
+        course = create_course(
+            db,
+            title=request.title or _default_title(request),
+            start_lat=request.start_lat,
+            start_lng=request.start_lng,
+            dog_id=dog_id,
+            path=result.path,
+            walk_date=request.walk_date,
+        )
+        entries = [
+            CoursePlaceEntry(
+                place=places_by_content_id[stop.content_id],
+                sequence=i + 1,
+                stay_minutes=DEFAULT_STAY_MINUTES,
+                travel_minutes=round(leg.duration_minutes),
+                travel_distance_meters=round(leg.distance_meters),
+            )
+            for i, (stop, leg) in enumerate(zip(result.stops, result.legs, strict=True))
+        ]
+        course_places = add_course_places(db, course, entries)
+    except Exception:
+        db.rollback()
+        raise
+
+    db.commit()
+    db.refresh(course)
+    return course, course_places, result
+
+
+def _to_course_summary(
+    course: Course,
+    course_places: list[CoursePlace],
+    *,
+    distance_meters: int | None,
+    requester_dog_id: int | None,
+    like_count: int,
+    is_liked: bool,
+    save_count: int,
+    is_saved: bool,
+) -> CourseSummary:
+    return CourseSummary(
+        course_id=course.course_id,
+        title=course.title,
+        start_lat=course.start_lat,
+        start_lng=course.start_lng,
+        distance_meters=distance_meters,
+        total_distance_meters=sum(cp.travel_distance_meters or 0 for cp in course_places),
+        total_duration_minutes=sum(
+            (cp.stay_minutes or 0) + (cp.travel_minutes or 0) for cp in course_places
+        ),
+        place_count=len(course_places),
+        thumbnail_image_url=course_places[0].place.image_url if course_places else None,
+        is_owner=requester_dog_id is not None and course.dog_id == requester_dog_id,
+        like_count=like_count,
+        is_liked=is_liked,
+        save_count=save_count,
+        is_saved=is_saved,
+    )
+
+
+def _engagement_lookup(
+    db: Session, course_ids: list[int], requester_dog_id: int | None
+) -> tuple[dict[int, int], set[int], dict[int, int], set[int]]:
+    """course_ids에 대한 좋아요/저장 카운트와, requester_dog_id가 좋아요/저장한
+    course_id 집합을 배치 조회한다(목록 크기와 무관하게 쿼리 4번 고정 — N+1 방지)."""
+    like_counts = likes_repository.count_by_course_ids(db, course_ids)
+    save_counts = saves_repository.count_by_course_ids(db, course_ids)
+    liked_ids = (
+        likes_repository.liked_course_ids(db, requester_dog_id, course_ids)
+        if requester_dog_id is not None
+        else set()
+    )
+    saved_ids = (
+        saves_repository.saved_course_ids(db, requester_dog_id, course_ids)
+        if requester_dog_id is not None
+        else set()
+    )
+    return like_counts, liked_ids, save_counts, saved_ids
+
+
+def list_nearby_courses(
+    db: Session,
+    *,
+    lat: float,
+    lng: float,
+    radius_m: int,
+    limit: int,
+    offset: int,
+    requester_dog_id: int | None = None,
+) -> list[CourseSummary]:
+    """반경(radius_m) 내 공개(is_shared=True) 코스를 거리순으로 반환한다.
+
+    Course/CoursePlace에는 총 거리/시간이 별도 저장돼 있지 않으므로, CoursePlace의
+    stay_minutes/travel_minutes/travel_distance_meters를 코스별로 합산해서 만든다.
+    """
+    min_lat, max_lat, min_lng, max_lng = bounding_box(lat, lng, radius_m)
+    candidates = list_courses_within_bounding_box(
+        db, min_lat=min_lat, max_lat=max_lat, min_lng=min_lng, max_lng=max_lng
+    )
+
+    within_radius = [
+        (course, haversine_distance_m(lat, lng, course.start_lat, course.start_lng))
+        for course in candidates
+    ]
+    within_radius = [pair for pair in within_radius if pair[1] <= radius_m]
+    within_radius.sort(key=lambda pair: pair[1])
+    page = within_radius[offset : offset + limit]
+
+    course_ids = [course.course_id for course, _ in page]
+    course_places = get_course_places_by_course_ids(db, course_ids)
+    places_by_course: dict[int, list[CoursePlace]] = defaultdict(list)
+    for cp in course_places:
+        places_by_course[cp.course_id].append(cp)
+
+    like_counts, liked_ids, save_counts, saved_ids = _engagement_lookup(
+        db, course_ids, requester_dog_id
+    )
+
+    return [
+        _to_course_summary(
+            course,
+            places_by_course.get(course.course_id, []),
+            distance_meters=round(distance),
+            requester_dog_id=requester_dog_id,
+            like_count=like_counts.get(course.course_id, 0),
+            is_liked=course.course_id in liked_ids,
+            save_count=save_counts.get(course.course_id, 0),
+            is_saved=course.course_id in saved_ids,
+        )
+        for course, distance in page
+    ]
+
+
+def list_saved_courses(db: Session, dog_id: int) -> list[CourseSummary]:
+    """내가 저장(북마크)한 코스를 저장한 순서(최신순)로 반환한다. 좌표 기준 조회가
+    아니므로 distance_meters는 없다(None)."""
+    course_ids = saves_repository.list_course_ids_by_dog_id(db, dog_id)
+    courses_by_id = {course.course_id: course for course in get_courses_by_ids(db, course_ids)}
+
+    course_places = get_course_places_by_course_ids(db, course_ids)
+    places_by_course: dict[int, list[CoursePlace]] = defaultdict(list)
+    for cp in course_places:
+        places_by_course[cp.course_id].append(cp)
+
+    like_counts, liked_ids, save_counts, saved_ids = _engagement_lookup(db, course_ids, dog_id)
+
+    return [
+        _to_course_summary(
+            courses_by_id[course_id],
+            places_by_course.get(course_id, []),
+            distance_meters=None,
+            requester_dog_id=dog_id,
+            like_count=like_counts.get(course_id, 0),
+            is_liked=course_id in liked_ids,
+            save_count=save_counts.get(course_id, 0),
+            is_saved=course_id in saved_ids,
+        )
+        for course_id in course_ids
+    ]
+
+
+def list_my_courses(db: Session, dog_id: int) -> list[CourseSummary]:
+    """내가 만든 코스 전부(공개 여부 무관)를 최신순으로 반환한다. 좌표 기준 조회가
+    아니므로 distance_meters는 없다(None)."""
+    courses = list_courses_by_dog_id(db, dog_id)
+    course_ids = [course.course_id for course in courses]
+
+    course_places = get_course_places_by_course_ids(db, course_ids)
+    places_by_course: dict[int, list[CoursePlace]] = defaultdict(list)
+    for cp in course_places:
+        places_by_course[cp.course_id].append(cp)
+
+    like_counts, liked_ids, save_counts, saved_ids = _engagement_lookup(db, course_ids, dog_id)
+
+    return [
+        _to_course_summary(
+            course,
+            places_by_course.get(course.course_id, []),
+            distance_meters=None,
+            requester_dog_id=dog_id,
+            like_count=like_counts.get(course.course_id, 0),
+            is_liked=course.course_id in liked_ids,
+            save_count=save_counts.get(course.course_id, 0),
+            is_saved=course.course_id in saved_ids,
+        )
+        for course in courses
+    ]
+
+
+def get_course_detail(
+    db: Session, course_id: int, requester_dog_id: int | None
+) -> tuple[Course, list[CoursePlace], bool] | None:
+    """코스 상세조회. 존재하지 않거나, 비공개인데 요청자가 소유자가 아니면 None을 반환해
+    존재 자체를 숨긴다(라우터에서 404로 처리)."""
+    course = get_course_by_id(db, course_id)
+    if course is None:
+        return None
+
+    is_owner = requester_dog_id is not None and course.dog_id == requester_dog_id
+    if not course.is_shared and not is_owner:
+        return None
+
+    course_places = get_course_places_by_course_ids(db, [course_id])
+    return course, course_places, is_owner
+
+
+def share_course(db: Session, course_id: int, dog_id: int) -> Course:
+    """코스를 전체 공개로 전환한다. 소유자만 호출 가능."""
+    course = get_course_by_id(db, course_id)
     if course is None:
         raise NotFoundError("Course", course_id)
+    if course.dog_id != dog_id:
+        raise NotCourseOwnerError
+
+    course.is_shared = True
+    db.commit()
+    db.refresh(course)
     return course
 
 
-def list_courses(db: Session) -> list[Course]:
-    return repository.list_courses(db)
+def update_course(db: Session, course_id: int, dog_id: int, **fields: object) -> Course:
+    """코스 메타데이터(현재는 title만)를 수정한다. 소유자만 호출 가능."""
+    course = get_course_by_id(db, course_id)
+    if course is None:
+        raise NotFoundError("Course", course_id)
+    if course.dog_id != dog_id:
+        raise NotCourseOwnerError
+
+    for key, value in fields.items():
+        setattr(course, key, value)
+
+    db.commit()
+    db.refresh(course)
+    return course
 
 
-def create_course(db: Session, course_in: CourseCreate) -> Course:
-    return repository.create_course(db, course_in)
+def save_course_places(
+    db: Session,
+    course_id: int,
+    dog_id: int,
+    entries: list[CoursePlaceReplacement],
+    path: list[tuple[float, float]],
+    *,
+    ended_at: datetime | None = None,
+) -> Course:
+    """코스 생성(POST) 후 프론트에서 스팟을 삭제/재구성해 코스를 확정할 때 호출한다
+    (소유자만 가능). 서버는 거리/시간을 다시 계산하지 않고 넘어온 값을 그대로 믿는다.
 
-
-def delete_course(db: Session, course_id: int) -> None:
-    course = get_course_or_404(db, course_id)
-    repository.delete_course(db, course)
-
-
-def _search_nearby_places(start_lat: str, start_lng: str) -> list[dict]:
-    """TODO: Kakao Local API 연동 — 출발지 주변 강아지 동반 가능 장소 검색."""
-    raise NotImplementedError
-
-
-def _build_route(waypoints: list[dict]) -> dict:
-    """TODO: T-map API 연동 — 경유지 기반 도보 경로/이동시간/거리 계산."""
-    raise NotImplementedError
-
-
-def _recommend_sequence(places: list[dict], duration_minutes: int) -> list[dict]:
-    """TODO: LLM 연동 — 소요 시간/강아지 특성을 고려한 방문 순서 및 체류시간 추천."""
-    raise NotImplementedError
-
-
-def generate_course(db: Session, request: CourseGenerateRequest) -> Course:
-    """Kakao Local API로 장소를 찾고, LLM으로 방문 순서를 정한 뒤,
-    T-map으로 경로를 계산해 코스를 생성하는 파이프라인.
-
-    TODO: 아래 3단계 연동 구현 후 CourseCreate로 조립하여 repository.create_course 호출.
+    코스 확정 = 산책 시작이므로, 같은 트랜잭션에서 이 산책의 Log도 새로 만든다.
+    started_at은 Course.walk_date(없으면 저장 시점)로, ended_at은 프론트가 계산해
+    넘긴 값으로 기록한다.
     """
-    raise NotImplementedError
+    course = get_course_by_id(db, course_id)
+    if course is None:
+        raise NotFoundError("Course", course_id)
+    if course.dog_id != dog_id:
+        raise NotCourseOwnerError
+
+    replace_course_places(db, course_id, entries)
+    course.path = path
+
+    db.add(
+        Log(
+            dog_id=dog_id,
+            course_id=course_id,
+            started_at=course.walk_date or datetime.now(UTC),
+            ended_at=ended_at,
+        )
+    )
+
+    db.commit()
+    db.refresh(course)
+    return course
+
+
+def delete_course_by_id(db: Session, course_id: int, dog_id: int) -> None:
+    """코스를 삭제한다. 소유자만 호출 가능. 자식 테이블(CoursePlace/Save/Like)은 FK
+    ondelete=CASCADE로, Log.course_id는 ondelete=SET NULL로 DB가 알아서 정리한다."""
+    course = get_course_by_id(db, course_id)
+    if course is None:
+        raise NotFoundError("Course", course_id)
+    if course.dog_id != dog_id:
+        raise NotCourseOwnerError
+
+    delete_course(db, course)
+    db.commit()

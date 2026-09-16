@@ -1,47 +1,50 @@
-from pydantic import BaseModel, ConfigDict
-
-from app.domains.places.models import PlaceCategory
+from pydantic import BaseModel
 
 
-class LocationBase(BaseModel):
-    lat: str
-    lng: str
+class PlaceCandidate(BaseModel):
+    """코스 생성 파이프라인의 장소 후보. 다음 단계(T-map 이동시간 + LLM 순서 결정)로 전달된다."""
 
-
-class LocationCreate(LocationBase):
-    pass
-
-
-class LocationResponse(LocationBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    location_id: int
-
-
-class PlaceBase(BaseModel):
-    name: str
-    content: str | None = None
-    category: PlaceCategory
+    content_id: str
+    title: str
+    category: str  # UI 카테고리(식당/산책/카페/액티비티)로 정규화
+    address: str
+    lat: float
+    lng: float
+    dist: float  # 조회 좌표로부터의 거리(m) — 거리 가중 랜덤 선별에 사용
     image_url: str | None = None
+    overview: str | None = None
     open_time: str | None = None
     rest_day: str | None = None
+    pet_accompany_type: str | None = None
+    pet_need_materials: str | None = None
+    pet_caution: str | None = None
+    pet_facilities: str | None = None
 
 
-class PlaceCreate(PlaceBase):
-    location: LocationCreate
-
-
-class PlaceUpdate(BaseModel):
-    name: str | None = None
-    content: str | None = None
-    category: PlaceCategory | None = None
-    image_url: str | None = None
-    open_time: str | None = None
-    rest_day: str | None = None
-
-
-class PlaceResponse(PlaceBase):
-    model_config = ConfigDict(from_attributes=True)
+class PlaceListItem(PlaceCandidate):
+    """홈 화면 '주변 장소' 목록 응답. 공공데이터 API에서 받아온 PlaceCandidate 정보
+    그대로에, 내부 place_id와 좋아요 정보만 얹는다."""
 
     place_id: int
-    location: LocationResponse
+    like_count: int
+    is_liked: bool
+
+
+class WalkingCourseLeg(BaseModel):
+    """산책 코스의 한 구간(경유지 사이)."""
+
+    from_title: str
+    to_title: str
+    distance_meters: float
+    duration_minutes: float
+
+
+class WalkingCourseResult(BaseModel):
+    """T맵 보행자 경로로 확정한 최종 산책 코스. path는 카카오맵 등 프론트에서 그릴 때 쓴다."""
+
+    stops: list[PlaceCandidate]  # 방문 순서대로
+    legs: list[WalkingCourseLeg]
+    total_distance_meters: float
+    total_duration_minutes: float
+    path: list[tuple[float, float]]  # (lat, lng) 폴리라인
+    generation_duration_ms: int  # 장소 선정+AI 확정+T맵 경로까지 전체 파이프라인 소요시간

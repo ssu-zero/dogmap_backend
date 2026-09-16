@@ -18,6 +18,17 @@ jobs:
           script: |
             cd /home/ubuntu/dogmap
             git pull origin main
-            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > .env
+            cat > .env <<EOF
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
+            KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}
+            KAKAO_REDIRECT_URI=${{ secrets.KAKAO_REDIRECT_URI }}
+            TMAP_APP_KEY=${{ secrets.TMAP_APP_KEY }}
+            LLM_API_KEY=${{ secrets.LLM_API_KEY }}
+            PET_TOUR_API_KEY=${{ secrets.PET_TOUR_API_KEY }}
+            JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+            EOF
             docker compose down
-            docker compose up --build -d
+            docker compose build
+            docker compose run --rm api alembic upgrade head
+            docker compose up -d

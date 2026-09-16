@@ -14,3 +14,7 @@ class AlreadyExistsError(DogMapError):
         self.resource = resource
         self.identifier = identifier
         super().__init__(f"{resource} already exists: {identifier}")
+
+
+class ExternalApiError(DogMapError):
+    """Kakao/T-map/공공데이터 등 외부 API 연동 실패 공통 예외."""

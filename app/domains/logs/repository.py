@@ -2,34 +2,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domains.logs.models import Log
-from app.domains.logs.schemas import LogCreate, LogUpdate
 
 
-def get_log(db: Session, log_id: int) -> Log | None:
+def get_by_id(db: Session, log_id: int) -> Log | None:
     return db.get(Log, log_id)
 
 
-def list_logs_by_dog(db: Session, dog_id: int) -> list[Log]:
-    stmt = select(Log).where(Log.dog_id == dog_id)
-    return list(db.scalars(stmt))
+def list_by_dog_id(db: Session, dog_id: int) -> list[Log]:
+    stmt = select(Log).where(Log.dog_id == dog_id).order_by(Log.started_at.desc())
+    return list(db.scalars(stmt).all())
 
 
-def create_log(db: Session, log_in: LogCreate) -> Log:
-    log = Log(**log_in.model_dump())
-    db.add(log)
+def update(db: Session, log: Log, **fields: object) -> Log:
+    for key, value in fields.items():
+        setattr(log, key, value)
     db.commit()
     db.refresh(log)
     return log
-
-
-def update_log(db: Session, log: Log, log_in: LogUpdate) -> Log:
-    for field, value in log_in.model_dump(exclude_unset=True).items():
-        setattr(log, field, value)
-    db.commit()
-    db.refresh(log)
-    return log
-
-
-def delete_log(db: Session, log: Log) -> None:
-    db.delete(log)
-    db.commit()

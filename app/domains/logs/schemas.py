@@ -1,27 +1,20 @@
-from datetime import date, time
+from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
-
-
-class LogBase(BaseModel):
-    date: date
-    start_time: time
-    end_time: time
-    diary: str | None = None
-    course_id: int
-    dog_id: int
-
-
-class LogCreate(LogBase):
-    pass
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LogUpdate(BaseModel):
-    diary: str | None = None
-    end_time: time | None = None
+    """산책 일지 수정. 지금은 diary만 수정 가능하다 — 보낸 필드만 반영되는 partial update."""
+
+    diary: str | None = Field(default=None, description="산책 일지 내용")
 
 
-class LogResponse(LogBase):
+class LogRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     log_id: int
+    dog_id: int
+    course_id: int | None
+    started_at: datetime
+    ended_at: datetime | None
+    diary: str | None

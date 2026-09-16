@@ -8,7 +8,9 @@ dependencies = [
     "alembic>=1.18.5",
     "cryptography>=49.0.0",
     "fastapi>=0.139.2",
+    "httpx>=0.28.1",
     "pydantic-settings>=2.14.2",
+    "pyjwt>=2.13.0",
     "pymysql>=1.2.0",
     "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.51",
@@ -17,8 +19,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.15.22",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
