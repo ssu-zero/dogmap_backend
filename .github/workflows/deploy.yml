@@ -17,6 +17,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
             cd /home/ubuntu/dogmap
             git pull origin main
             cat > .env <<EOF
@@ -31,5 +32,10 @@ jobs:
             EOF
             docker compose down
             docker compose build
+            docker compose up -d db
+            until docker compose exec -T db mysqladmin ping -h localhost --silent; do
+              echo "db 컨테이너 기동 대기 중..."
+              sleep 2
+            done
             docker compose run --rm api alembic upgrade head
             docker compose up -d
