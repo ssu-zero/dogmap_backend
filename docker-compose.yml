@@ -11,6 +11,8 @@ services:
 
   db:
     image: mysql:8.0
+    command: --performance-schema=OFF --innodb-buffer-pool-size=128M
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: dogmap
