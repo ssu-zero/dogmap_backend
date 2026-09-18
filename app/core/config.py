@@ -36,11 +36,22 @@ class Settings(BaseSettings):
     KAKAO_CLIENT_SECRET: str = ""  # 카카오 개발자 콘솔에서 Client Secret을 활성화한 경우에만 필요
     KAKAO_REDIRECT_URI: str = "http://localhost:5173/auth/kakao/callback"
 
+    # 프론트엔드 도메인(쉼표로 여러 개 구분). CORSMiddleware allow_origins에 그대로 쓰인다.
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:5173,https://dogmap.store,https://www.dogmap.store"
+
     # 자체 발급 JWT (카카오 로그인 이후 세션 유지용)
     JWT_SECRET_KEY: str = "dev-secret-change-me"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 14  # 2주
     SIGNUP_TOKEN_EXPIRE_MINUTES: int = 30  # 신규 회원이 강아지 프로필을 입력하는 동안만 유효
+
+    # S3 (프로필 이미지 업로드 - presigned URL 방식). 버킷은 퍼블릭 읽기로 설정해서
+    # image_url을 별도 서명 없이 그대로 <img src>에 쓴다. 업로드(PUT)만 presigned URL로 제한한다.
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = "ap-northeast-2"
+    S3_BUCKET_NAME: str = "12dogmap-images"
+    S3_PRESIGNED_URL_EXPIRE_SECONDS: int = 300  # 5분 — 이 안에 PUT 업로드를 완료해야 함
 
 
 settings = Settings()

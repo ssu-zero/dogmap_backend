@@ -6,9 +6,40 @@ from app.core.security import create_access_token, get_current_dog_id, get_signu
 from app.domains.courses.schemas import CourseSummary
 from app.domains.courses.service import list_my_courses
 from app.domains.dogs import repository
-from app.domains.dogs.schemas import DogCreate, DogResponse, DogUpdate, SignupCompleteResponse
+from app.domains.dogs.external.s3_client import create_presigned_upload
+from app.domains.dogs.schemas import (
+    DogCreate,
+    DogResponse,
+    DogUpdate,
+    PresignedUploadRequest,
+    PresignedUploadResponse,
+    SignupCompleteResponse,
+)
 
 router = APIRouter(prefix="/dogs", tags=["dogs"])
+
+
+@router.post(
+    "/signup/image/presigned-url",
+    response_model=PresignedUploadResponse,
+    summary="온보딩: 프로필 이미지 업로드용 presigned URL 발급",
+    description=(
+        "카카오 로그인 직후 `signup_token`으로 인증해서 호출한다 (Authorize에 signup_token 입력).\n\n"
+        "1. 이 API로 upload_url을 받는다.\n"
+        "2. upload_url로 이미지 파일을 PUT 업로드한다.\n"
+        "3. 응답의 image_url을 POST /dogs 요청의 image_url 필드에 넣어 회원가입을 완료한다.\n\n"
+        "upload_url은 발급 후 5분간만 유효하다."
+    ),
+)
+def get_signup_image_presigned_url(
+    body: PresignedUploadRequest,
+    kakao_id: int = Depends(get_signup_kakao_id),
+):
+    try:
+        upload = create_presigned_upload(folder="signup", owner_id=kakao_id, file_extension=body.file_extension)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return PresignedUploadResponse(upload_url=upload.upload_url, image_url=upload.image_url)
 
 
 @router.post(
@@ -84,6 +115,29 @@ def update_my_profile(
         return dog
 
     return repository.update(db, dog, **update_data)
+
+
+@router.post(
+    "/me/image/presigned-url",
+    response_model=PresignedUploadResponse,
+    summary="마이페이지: 프로필 이미지 업로드용 presigned URL 발급",
+    description=(
+        "`access_token`으로 인증해서 호출한다.\n\n"
+        "1. 이 API로 upload_url을 받는다.\n"
+        "2. upload_url로 이미지 파일을 PUT 업로드한다.\n"
+        "3. 응답의 image_url을 PATCH /dogs/me 요청의 image_url 필드에 넣어 프로필을 수정한다.\n\n"
+        "upload_url은 발급 후 5분간만 유효하다."
+    ),
+)
+def get_my_image_presigned_url(
+    body: PresignedUploadRequest,
+    dog_id: int = Depends(get_current_dog_id),
+):
+    try:
+        upload = create_presigned_upload(folder="profile", owner_id=dog_id, file_extension=body.file_extension)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return PresignedUploadResponse(upload_url=upload.upload_url, image_url=upload.image_url)
 
 
 @router.get(

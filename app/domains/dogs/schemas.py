@@ -44,3 +44,14 @@ class SignupCompleteResponse(BaseModel):
 
     access_token: str = Field(description="이후 모든 인증 API에 Bearer 토큰으로 사용")
     dog: DogResponse
+
+
+class PresignedUploadRequest(BaseModel):
+    file_extension: str = Field(description="업로드할 이미지 파일 확장자", examples=["jpg", "png", "webp"])
+
+
+class PresignedUploadResponse(BaseModel):
+    upload_url: str = Field(description="이 URL로 이미지 파일을 그대로 PUT 업로드한다 (Content-Type 헤더는 생략 가능)")
+    image_url: str = Field(
+        description="업로드 완료 후 프로필 이미지로 쓸 URL. POST /dogs 또는 PATCH /dogs/me의 image_url 필드에 그대로 넣는다"
+    )
