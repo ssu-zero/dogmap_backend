@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # (카카오는 REST API 키 = OAuth client_id).
     KAKAO_CLIENT_SECRET: str = ""  # 카카오 개발자 콘솔에서 Client Secret을 활성화한 경우에만 필요
     KAKAO_REDIRECT_URI: str = "http://localhost:3000/auth/kakao/callback"
+    # 프론트가 전달할 수 있는 카카오 OAuth callback URI 추가 허용 목록(쉼표 구분).
+    # KAKAO_REDIRECT_URI는 이전 배포와의 호환을 위해 항상 허용한다.
+    KAKAO_ALLOWED_REDIRECT_URIS: str = ""
 
     # 프론트엔드 도메인(쉼표로 여러 개 구분). CORSMiddleware allow_origins에 그대로 쓰인다.
     CORS_ALLOWED_ORIGINS: str = "http://localhost:5173,https://dogmap.store,https://www.dogmap.store"
