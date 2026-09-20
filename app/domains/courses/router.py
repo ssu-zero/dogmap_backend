@@ -255,9 +255,9 @@ async def replace_course_places_endpoint(
     db: Session = Depends(get_db),
     dog_id: int = Depends(get_current_dog_id),
 ) -> CourseRead:
-    """코스 생성(POST) 후 프론트에서 스팟을 삭제/재구성해 코스를 확정할 때 호출한다
-    (소유자만 가능). 서버는 거리/시간을 다시 계산하지 않고 넘어온 값을 그대로 신뢰해서
-    저장하며, 이 확정과 함께 산책 기록(Log)도 새로 만든다."""
+    """코스 생성 후 확정하거나 기존 스팟을 편집한다(소유자만 가능).
+    서버는 거리/시간을 다시 계산하지 않고 넘어온 값을 저장한다.
+    첫 확정에서만 산책 기록(Log)을 만든다."""
     entries = [
         CoursePlaceReplacement(
             place_id=p.place_id,

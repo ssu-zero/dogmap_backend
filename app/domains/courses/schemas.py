@@ -78,11 +78,9 @@ class CoursePlaceRead(BaseModel):
 
 
 class CoursePlacesReplaceRequest(BaseModel):
-    """코스 생성(POST) 후 프론트에서 스팟을 삭제/재구성해 코스를 확정할 때 호출한다
-    (소유자만 가능). places는 코스 생성/조회 응답과 동일한 형식(CoursePlaceRead)을 그대로
-    받는다 — 프론트가 이미 갖고 있는 응답 객체를 그대로 재사용하면 된다. 서버는 거리/시간을
-    다시 계산하지 않고 넘어온 값을 그대로 신뢰해서 저장하며, 이 확정과 함께 산책 기록
-    (Log)도 새로 만든다."""
+    """새 코스 확정 또는 기존 코스 편집 시 스팟 구성을 저장한다(소유자만 가능).
+    places는 코스 응답의 CoursePlaceRead 형식을 재사용한다. 서버는 거리/시간을
+    다시 계산하지 않는다. 산책 기록(Log)은 첫 확정에서만 생성한다."""
 
     places: list[CoursePlaceRead]
     path: list[tuple[float, float]]

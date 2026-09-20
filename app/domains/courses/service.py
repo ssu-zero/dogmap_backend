@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.common.exceptions import NotFoundError
@@ -315,12 +316,9 @@ def save_course_places(
     *,
     ended_at: datetime | None = None,
 ) -> Course:
-    """코스 생성(POST) 후 프론트에서 스팟을 삭제/재구성해 코스를 확정할 때 호출한다
-    (소유자만 가능). 서버는 거리/시간을 다시 계산하지 않고 넘어온 값을 그대로 믿는다.
-
-    코스 확정 = 산책 시작이므로, 같은 트랜잭션에서 이 산책의 Log도 새로 만든다.
-    started_at은 Course.walk_date(없으면 저장 시점)로, ended_at은 프론트가 계산해
-    넘긴 값으로 기록한다.
+    """코스 스팟 구성을 저장한다(소유자만 가능). 서버는 프론트가 계산한 거리/시간을
+    그대로 믿는다. 첫 확정 때만 산책 기록을 만들고, 이후 편집에서는 기존 기록과
+    일기를 유지한다.
     """
     course = get_course_by_id(db, course_id)
     if course is None:
@@ -331,14 +329,18 @@ def save_course_places(
     replace_course_places(db, course_id, entries)
     course.path = path
 
-    db.add(
-        Log(
-            dog_id=dog_id,
-            course_id=course_id,
-            started_at=course.walk_date or datetime.now(UTC),
-            ended_at=ended_at,
+    # The first replacement finalizes a newly generated course. Later edits
+    # must not create another walk record (or overwrite an existing diary).
+    existing_log_id = db.scalar(select(Log.log_id).where(Log.course_id == course_id).limit(1))
+    if existing_log_id is None:
+        db.add(
+            Log(
+                dog_id=dog_id,
+                course_id=course_id,
+                started_at=course.walk_date or datetime.now(UTC),
+                ended_at=ended_at,
+            )
         )
-    )
 
     db.commit()
     db.refresh(course)
