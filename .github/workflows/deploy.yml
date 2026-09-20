@@ -25,6 +25,7 @@ jobs:
             KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
             KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}
             KAKAO_REDIRECT_URI=${{ secrets.KAKAO_REDIRECT_URI }}
+            KAKAO_ALLOWED_REDIRECT_URIS=${{ secrets.KAKAO_ALLOWED_REDIRECT_URIS }}
             TMAP_APP_KEY=${{ secrets.TMAP_APP_KEY }}
             LLM_API_KEY=${{ secrets.LLM_API_KEY }}
             PET_TOUR_API_KEY=${{ secrets.PET_TOUR_API_KEY }}

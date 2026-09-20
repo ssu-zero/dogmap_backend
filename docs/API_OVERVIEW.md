@@ -78,9 +78,8 @@ router/schema/repository는 아직 구현되어 있지 않아 API로 노출되�
 
 | 연동 | 용도 | 설정 |
 | --- | --- | --- |
-| 카카오 OAuth | 로그인 | `KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET`, `KAKAO_REDIRECT_URI` |
-| 공공데이터포털 KorPetTourService2 | 반려동물 동반 가능 장소 후보 | `PET_TOUR_API_KEY` |
 | 카카오 OAuth | 로그인 | `KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET`, `KAKAO_REDIRECT_URI`, `KAKAO_ALLOWED_REDIRECT_URIS` |
+| 공공데이터포털 KorPetTourService2 | 반려동물 동반 가능 장소 후보 | `PET_TOUR_API_KEY` |
 | Gemini (OpenAI 호환) | 최종 장소 조합 선택(LLM) | `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL=gemini-flash-lite-latest` (thinking 없는 lite 모델을 응답속도 때문에 기본값으로 사용) |
 | T맵(SK Open API) | 보행자 경로/거리/시간 계산 | `TMAP_APP_KEY` |
 | 자체 JWT | 세션 유지 | `JWT_SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES`(2주), `SIGNUP_TOKEN_EXPIRE_MINUTES`(30분) |
