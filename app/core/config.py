@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # 프론트엔드 도메인(쉼표로 여러 개 구분). Bearer 토큰을 보내므로 와일드카드가 아니라
     # 명시적인 origin만 허용한다.
     CORS_ALLOWED_ORIGINS: str = (
-        "http://localhost:3000,http://localhost:3001,"
+        "http://localhost:3000,"
         "https://dogmap.store,https://www.dogmap.store"
     )
     # Vercel의 preview URL은 배포마다 suffix가 바뀐다. 우리 웹 프로젝트 이름으로 시작하는
