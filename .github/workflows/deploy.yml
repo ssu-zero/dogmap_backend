@@ -5,13 +5,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-concurrency:
-  # The deployment recreates the same Docker Compose stack on one EC2 host.
-  # Queue subsequent deployments instead of letting concurrent image/cache
-  # cleanup commands tear down each other's containers.
-  group: dogmap-production-deploy
-  cancel-in-progress: false
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
