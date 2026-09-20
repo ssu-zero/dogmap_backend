@@ -452,6 +452,25 @@ def test_replace_course_places_without_ended_at_creates_log_without_it(client, s
     assert logs[0]["started_at"] is not None
 
 
+def test_replacing_places_again_does_not_duplicate_the_walk_log(client, session_factory):
+    course_id = _seed_nearby_course(session_factory, dog_id=1)
+    db = session_factory()
+    place_id = db.scalars(select(Place)).first().place_id
+    db.close()
+
+    body = _places_replace_body(place_id)
+    body["ended_at"] = "2026-09-20T11:30:00+09:00"
+    for _ in range(2):
+        response = client.put(
+            f"/api/courses/{course_id}/places", json=body, headers=_auth_headers(dog_id=1)
+        )
+        assert response.status_code == 200
+
+    logs = client.get("/api/logs", headers=_auth_headers(dog_id=1)).json()
+    assert len(logs) == 1
+    assert logs[0]["course_id"] == course_id
+
+
 def test_share_course_requires_auth(client, session_factory):
     course_id = _seed_nearby_course(session_factory, is_shared=False)
 
