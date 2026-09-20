@@ -1,10 +1,17 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import AnyHttpUrl, BaseModel, Field
 
 
 class KakaoLoginRequest(BaseModel):
     code: str = Field(description="카카오 인가 코드 받기(redirect) 완료 후 리다이렉트 URL의 code 파라미터 값")
+    redirect_uri: AnyHttpUrl | None = Field(
+        default=None,
+        description=(
+            "인가 코드를 발급받을 때 사용한 callback URI. "
+            "서버의 KAKAO_REDIRECT_URI 또는 KAKAO_ALLOWED_REDIRECT_URIS에 등록된 값만 허용."
+        ),
+    )
 
 
 class LoginStatus(StrEnum):
