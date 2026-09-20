@@ -39,8 +39,17 @@ class Settings(BaseSettings):
     # KAKAO_REDIRECT_URI는 이전 배포와의 호환을 위해 항상 허용한다.
     KAKAO_ALLOWED_REDIRECT_URIS: str = ""
 
-    # 프론트엔드 도메인(쉼표로 여러 개 구분). CORSMiddleware allow_origins에 그대로 쓰인다.
-    CORS_ALLOWED_ORIGINS: str = "http://localhost:5173,https://dogmap.store,https://www.dogmap.store"
+    # 프론트엔드 도메인(쉼표로 여러 개 구분). Bearer 토큰을 보내므로 와일드카드가 아니라
+    # 명시적인 origin만 허용한다.
+    CORS_ALLOWED_ORIGINS: str = (
+        "http://localhost:3000,http://localhost:3001,"
+        "https://dogmap.store,https://www.dogmap.store"
+    )
+    # Vercel의 preview URL은 배포마다 suffix가 바뀐다. 우리 웹 프로젝트 이름으로 시작하는
+    # HTTPS 주소만 허용해 preview에서도 실제 API를 직통으로 확인할 수 있게 한다.
+    CORS_ALLOWED_ORIGIN_REGEX: str = (
+        r"https://dogmap-frontend-web(?:-[a-z0-9-]+)?\.vercel\.app"
+    )
 
     # 자체 발급 JWT (카카오 로그인 이후 세션 유지용)
     JWT_SECRET_KEY: str = "dev-secret-change-me"
